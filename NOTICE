@@ -1,0 +1,21 @@
+FastH3-in-C (fh3)
+Copyright (c) 2026 FastH3-in-C Contributors
+
+This project is a dependency-free C99 inference engine for running the
+FastH3-8-Step-V2 (35B MiniMax-H3) text-to-video+audio diffusion model on CPU
+via NVMe streaming.
+
+Credits and Attributions:
+- MiniMax: Architecture and weights for MiniMax-H3 (35B dense DiT),
+  released under the MiniMax H3 Community License.
+- FastVideo Team: FastVideo implementation, FastH3-8-Step-V2 pipeline,
+  VSA-H3 (Video Sparse Attention) mechanism, and DMD2 distillation schedule.
+  (https://github.com/FastVideo/FastVideo)
+- realrebelai: FastH3-V2_GGUFs quantized GGUF distribution and conversion
+  (https://huggingface.co/realrebelai/FastH3-V2_GGUFs).
+- Fareed Khan: kimi-k3-in-c architecture, pioneering the pinned prefix + ring
+  buffer NVMe streaming pattern on consumer CPU hardware
+  (https://github.com/FareedKhan-dev/kimi-k3-in-c).
+
+Model weights are subject to their respective original licenses and must
+never be committed to this repository.

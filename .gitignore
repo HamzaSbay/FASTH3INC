@@ -1,0 +1,41 @@
+# Build artifacts
+build/
+bin/
+lib/
+*.o
+*.obj
+*.exe
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+
+# Python & environments
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Model files, packed files, outputs (NEVER commit weights)
+models/
+packed/
+out/
+*.gguf
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.y4m
+*.wav
+*.mp4
+
+# Editor / IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
