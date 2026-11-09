@@ -17,10 +17,10 @@ A dependency-free C99 engine that runs **FastH3-8-Step-V2** (35B MiniMax-H3, tex
 | Stage | DiT Bytes Touched per Step |
 |---|---|
 | Official BF16 Transformer | 70.10 GB |
-| realrebelai Q4_K_M GGUF | 19.84 GB |
-| − AdaLN folded into exact table | 12.52 GB |
-| − Run-once components (refiner, condition proj) | ≈ 11.92 GB |
-| RAM floor for DiT phase (2 ring slots + activations) | ≈ 1.5 GB |
+| realrebelai Q4_K_M GGUF | 19.84 GB (19,840,085,056 B) |
+| − AdaLN folded into exact table | 12.51 GB (12,505,070,656 B) |
+| − Run-once components (refiner, condition proj) | 11.92 GB (11,924,019,200 B) |
+| RAM floor for DiT phase (2 ring slots + activations) | ≈ 1.5 GB (2 slots = 454.87 MiB / 476.96 MB) |
 
 ## Building and Testing
 

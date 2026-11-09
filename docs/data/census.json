@@ -1,0 +1,196 @@
+{
+  "dit": {
+    "url": "https://huggingface.co/realrebelai/FastH3-V2_GGUFs/resolve/main/FastH3-8-Step-V2-Q4_K_M.gguf",
+    "arch": "wan",
+    "total_tensors": 585,
+    "total_bytes": 19840085056,
+    "num_blocks": 50,
+    "adaln": {
+      "weight_bytes": 7315660800,
+      "bias_bytes": 19353600,
+      "total_bytes": 7335014400,
+      "tensor_count": 100
+    },
+    "trunk": {
+      "total_bytes": 11924019200,
+      "tensor_count": 450,
+      "per_block_bytes": 238480384,
+      "max_block_run_bytes": 238480384,
+      "ring_2slot_bytes": 476960768
+    },
+    "per_block": {
+      "total_bytes": 385180672,
+      "adaln_bytes": 146700288,
+      "trunk_bytes": 238480384
+    },
+    "run_once": {
+      "total_bytes": 581051456,
+      "tensor_count": 35,
+      "categories": {
+        "token_refiner": 433630208,
+        "audio_patch_proj": 365568,
+        "final_layer": 59244032,
+        "condition_proj": 55071744,
+        "video_patch_proj": 1053696,
+        "time_embedder": 31686144,
+        "rope": 64
+      }
+    },
+    "quant_types": {
+      "Q4_K": 19670999040,
+      "F32": 21826624,
+      "F16": 147259392
+    },
+    "groups": {
+      "token_refiner": {
+        "bytes": 433630208,
+        "count": 17,
+        "types": [
+          "F32",
+          "Q4_K"
+        ]
+      },
+      "blocks.N.attn": {
+        "bytes": 5419059200,
+        "count": 250,
+        "types": [
+          "F32",
+          "Q4_K"
+        ]
+      },
+      "audio_patch_proj": {
+        "bytes": 365568,
+        "count": 2,
+        "types": [
+          "F16",
+          "F32"
+        ]
+      },
+      "final_layer": {
+        "bytes": 59244032,
+        "count": 7,
+        "types": [
+          "F16",
+          "F32"
+        ]
+      },
+      "condition_proj": {
+        "bytes": 55071744,
+        "count": 2,
+        "types": [
+          "F16",
+          "F32"
+        ]
+      },
+      "video_patch_proj": {
+        "bytes": 1053696,
+        "count": 2,
+        "types": [
+          "F16",
+          "F32"
+        ]
+      },
+      "time_embedder": {
+        "bytes": 31686144,
+        "count": 4,
+        "types": [
+          "F16",
+          "F32"
+        ]
+      },
+      "blocks.N.adaln_proj": {
+        "bytes": 7335014400,
+        "count": 100,
+        "types": [
+          "F32",
+          "Q4_K"
+        ]
+      },
+      "blocks.N.mlp": {
+        "bytes": 6502809600,
+        "count": 100,
+        "types": [
+          "Q4_K"
+        ]
+      },
+      "blocks.N.norm1": {
+        "bytes": 1075200,
+        "count": 50,
+        "types": [
+          "F32"
+        ]
+      },
+      "blocks.N.norm2": {
+        "bytes": 1075200,
+        "count": 50,
+        "types": [
+          "F32"
+        ]
+      },
+      "rope": {
+        "bytes": 64,
+        "count": 1,
+        "types": [
+          "F32"
+        ]
+      }
+    }
+  },
+  "te": {
+    "url": "https://huggingface.co/realrebelai/FastH3-V2_GGUFs/resolve/main/Text%20Encoders/qwen3vl-32B-MiniMax-H3-Q4_K_M.gguf",
+    "arch": "qwen3vl",
+    "total_tensors": 902,
+    "total_bytes": 14576902848,
+    "layers_lt50": {
+      "bytes": 13783091200,
+      "tensor_count": 550,
+      "layer_count": 50
+    },
+    "layers_ge50": {
+      "bytes": 0,
+      "tensor_count": 0
+    },
+    "embed_tokens": {
+      "bytes": 437575680,
+      "tensor_count": 1
+    },
+    "visual": {
+      "bytes": 356235968,
+      "tensor_count": 351
+    },
+    "other": {
+      "bytes": 0,
+      "tensor_count": 0
+    },
+    "quant_types": {
+      "Q4_K": 14275148544,
+      "F32": 3963840,
+      "Q6_K": 215040000,
+      "Q5_K": 73903104,
+      "F16": 8847360
+    }
+  },
+  "reductions_ledger": {
+    "official_bf16_gb": 70.1,
+    "q4_k_m_gguf": {
+      "bytes": 19840085056,
+      "gb": 19.84,
+      "gib": 18.48
+    },
+    "after_adaln_folded": {
+      "bytes": 12505070656,
+      "gb": 12.51,
+      "gib": 11.65
+    },
+    "trunk_per_step": {
+      "bytes": 11924019200,
+      "gb": 11.92,
+      "gib": 11.11
+    },
+    "ram_floor": {
+      "ring_2slot_bytes": 476960768,
+      "ring_2slot_mb": 454.87,
+      "estimated_phase_gb": 1.5
+    }
+  }
+}
