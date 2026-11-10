@@ -13,6 +13,7 @@ lib/
 
 # Python & environments
 .venv/
+.cache/
 __pycache__/
 *.py[cod]
 *$py.class

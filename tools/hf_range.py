@@ -6,10 +6,12 @@ Face) as well as local file fallback for testing and offline runs.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import time
 from typing import Optional
+from pathlib import Path
 from urllib.parse import urlparse
 import requests
 
@@ -17,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 # Status codes considered transient and safe to retry with backoff
 RETRYABLE_STATUS_CODES = {408, 429, 500, 502, 503, 504}
+
+DEFAULT_CACHE_DIR = os.environ.get("FH3_CACHE_DIR")
 
 
 def read(
@@ -28,6 +32,8 @@ def read(
     timeout: float = 30.0,
     chunk_size: int = 64 * 1024,
     headers: Optional[dict[str, str]] = None,
+    use_cache: bool = True,
+    cache_dir: Optional[str] = None,
 ) -> bytes:
     """Read a byte slice [start, end) from a remote URL or local file.
 
@@ -80,6 +86,20 @@ def read(
         with open(file_path, "rb") as f:
             f.seek(start)
             return f.read(to_read)
+
+    # Check disk cache for remote slice if enabled
+    cache_path = None
+    effective_cache_dir = cache_dir or DEFAULT_CACHE_DIR
+    if use_cache and effective_cache_dir:
+        url_hash = hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]
+        c_dir = Path(effective_cache_dir)
+        cache_path = c_dir / f"{url_hash}_{start}_{end}.bin"
+        if cache_path.exists() and cache_path.stat().st_size == expected_len:
+            try:
+                with open(cache_path, "rb") as cf:
+                    return cf.read()
+            except OSError:
+                pass
 
     # Remote HTTP / HTTPS fetching
     req_headers = dict(headers or {})
@@ -181,4 +201,14 @@ def read(
             )
             time.sleep(sleep_time)
 
-    return bytes(buf)
+    res = bytes(buf)
+    if cache_path and len(res) == expected_len:
+        try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            temp_cache = cache_path.with_suffix(".tmp")
+            with open(temp_cache, "wb") as cf:
+                cf.write(res)
+            temp_cache.replace(cache_path)
+        except OSError:
+            pass
+    return res

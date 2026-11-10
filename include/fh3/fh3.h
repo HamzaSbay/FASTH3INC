@@ -24,6 +24,8 @@ typedef struct Fh3Te Fh3Te;
 typedef struct Fh3VaeA Fh3VaeA;
 typedef struct Fh3VaeV Fh3VaeV;
 typedef struct Fh3FrameSink Fh3FrameSink;
+typedef struct Fh3Pack Fh3Pack;
+typedef struct Fh3Adaln Fh3Adaln;
 
 /* Quantization types (matching GGML / GGUF constants) */
 typedef enum {
@@ -52,6 +54,19 @@ typedef struct Fh3W {
     const uint8_t *data;
 } Fh3W;
 
+/* Layer view with Fh3W weight structures pointing into layer memory */
+typedef struct Fh3LayerView {
+    Fh3W qkv;
+    Fh3W gate_compress;
+    Fh3W out;
+    Fh3W fc1;
+    Fh3W fc2;
+    Fh3W norm1;
+    Fh3W norm2;
+    Fh3W q_norm;
+    Fh3W k_norm;
+} Fh3LayerView;
+
 /* Quantization routines */
 size_t fh3_row_bytes(int type, int64_t n);
 void fh3_dequant(int type, const void *src, float *dst, int64_t n);
@@ -69,6 +84,17 @@ void fh3_modulate(float *x, const float *shift, const float *scale, int n, int d
 void fh3_gate_residual(float *h, const float *gate, const float *y, int n, int dim);
 void fh3_attention(const float *q, const float *k, const float *v, float *o, int n, int heads, int hd);
 void fh3_timestep_embed(const double *t, int nt, int freq_dim, float *out);
+
+/* Packed trunk operations */
+int fh3_pack_open(const char *path, Fh3Pack *p);
+void fh3_pack_close(Fh3Pack *p);
+Fh3LayerView fh3_pack_layer(const Fh3Pack *p, int L, const uint8_t *base);
+
+/* AdaLN table operations */
+uint64_t fh3_schedule_hash(const int *dmd_steps, int n_steps, double video_shift, double audio_shift);
+int fh3_adaln_open(const char *path, uint64_t expect_hash, Fh3Adaln *a);
+void fh3_adaln_close(Fh3Adaln *a);
+const float *fh3_adaln_row(const Fh3Adaln *a, int step, int block, int pair, int chunk);
 
 /* Return / Error codes */
 #define FH3_OK             0
