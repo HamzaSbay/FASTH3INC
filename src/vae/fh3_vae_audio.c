@@ -163,6 +163,7 @@ int fh3_vae_audio_open(const char *path, Fh3VaeA **out) {
     m->num_dilations = (int)read_u32_le(data + 28);
 
     if (m->num_upsamples > 8 || m->num_resblocks > 8 || m->num_dilations > 8 ||
+        m->num_upsamples <= 0 || m->num_resblocks <= 0 || m->num_dilations <= 0 ||
         m->latent_channels <= 0 || m->latent_dim <= 0 || m->decoder_dim <= 0) {
         free(data);
         free(m);
@@ -385,6 +386,9 @@ int fh3_vae_audio_decode(const Fh3VaeA *m, const float *lat, int L, float *pcm) 
     /* Compute maximum buffer sizes required across all stages */
     size_t max_T = (size_t)total_samples;
     size_t max_buf_elems = (size_t)m->latent_dim * L;
+    if ((size_t)m->latent_channels * L > max_buf_elems) {
+        max_buf_elems = (size_t)m->latent_channels * L;
+    }
     if ((size_t)m->decoder_dim * L > max_buf_elems) {
         max_buf_elems = (size_t)m->decoder_dim * L;
     }

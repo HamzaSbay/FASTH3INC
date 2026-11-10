@@ -375,7 +375,9 @@ def pack_remote_or_local_safetensors(
         }
         dt = dtype_map.get(info["dtype"], np.float32)
         arr = np.frombuffer(raw, dtype=dt).reshape(info["shape"])
-        if dt != np.float32:
+        if dt == np.uint16 and info["dtype"] == "BF16":
+            arr = (arr.astype(np.uint32) << 16).view(np.float32)
+        elif dt != np.float32:
             arr = arr.astype(np.float32)
         tensor_cache[name] = arr
         return arr
