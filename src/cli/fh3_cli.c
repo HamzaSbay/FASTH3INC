@@ -277,10 +277,19 @@ int fh3_cli_plan_memory(const Fh3ResolvedDims *dims, double mem_gb, bool is_tiny
     }
     out_plan->budget_bytes = budget_bytes;
 
-    /* Check plan bounds */
-    int check_rc = fh3_plan_check(out_plan);
-    if (check_rc != FH3_OK) {
+    if (budget_bytes < min_bytes) {
+        fprintf(stderr,
+                "fh3: error: requested memory (%llu bytes / %.2f GB) is below minimum requirement (%llu bytes / %.2f GB).\n",
+                (unsigned long long)budget_bytes, (double)budget_bytes / (1024.0 * 1024.0 * 1024.0),
+                (unsigned long long)min_bytes, (double)min_bytes / (1024.0 * 1024.0 * 1024.0));
         return FH3_EXIT_NOMEM;
+    }
+
+    if (!is_tiny) {
+        int check_rc = fh3_plan_check(out_plan);
+        if (check_rc != FH3_OK) {
+            return FH3_EXIT_NOMEM;
+        }
     }
 
     return FH3_EXIT_OK;
@@ -941,7 +950,7 @@ int fh3_cli_run_phase2(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
 
     /* Open trunk streamer */
     Fh3Trunk trunk;
-    uint64_t dit_budget = args->is_tiny ? (50 * 1024 * 1024ULL) : (args->mem_gb > 0 ? (uint64_t)(args->mem_gb * 1024 * 1024 * 1024) : (9ULL * 1024 * 1024 * 1024));
+    uint64_t dit_budget = (args->mem_gb > 0) ? (uint64_t)(args->mem_gb * 1024.0 * 1024.0 * 1024.0) : (args->is_tiny ? (50 * 1024 * 1024ULL) : (9ULL * 1024 * 1024 * 1024));
     rc = fh3_trunk_open(trunk_path, dit_budget, &trunk);
     if (rc != FH3_OK) {
         fprintf(stderr, "fh3: error: failed to open trunk '%s' (error %d)\n", trunk_path, rc);

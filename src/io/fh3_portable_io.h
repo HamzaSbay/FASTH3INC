@@ -95,6 +95,15 @@ static inline uint64_t fh3_mem_available(void) {
     return 0;
 }
 
+static inline uint64_t fh3_mem_total(void) {
+    MEMORYSTATUSEX st;
+    st.dwLength = sizeof(st);
+    if (GlobalMemoryStatusEx(&st)) {
+        return (uint64_t)st.ullTotalPhys;
+    }
+    return 0;
+}
+
 static inline int64_t fh3_pread(Fh3File *f, void *buf, size_t n, uint64_t off) {
     if (!f || f->handle == INVALID_HANDLE_VALUE || !buf) return FH3_ERR;
     if (n == 0) return 0;
@@ -278,6 +287,21 @@ static inline uint64_t fh3_mem_available(void) {
     uint64_t kb = 0;
     while (fgets(line, sizeof(line), fp)) {
         if (sscanf(line, "MemAvailable: %llu kB", (unsigned long long *)&kb) == 1) {
+            fclose(fp);
+            return kb * 1024ULL;
+        }
+    }
+    fclose(fp);
+    return 0;
+}
+
+static inline uint64_t fh3_mem_total(void) {
+    FILE *fp = fopen("/proc/meminfo", "r");
+    if (!fp) return 0;
+    char line[256];
+    uint64_t kb = 0;
+    while (fgets(line, sizeof(line), fp)) {
+        if (sscanf(line, "MemTotal: %llu kB", (unsigned long long *)&kb) == 1) {
             fclose(fp);
             return kb * 1024ULL;
         }
