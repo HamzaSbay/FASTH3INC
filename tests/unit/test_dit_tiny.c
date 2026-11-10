@@ -369,12 +369,210 @@ static int test_refiner_runs_once(void) {
     return 0;
 }
 
+/* -------------------------------------------------------------------------
+ * Test 5: dit_tiny_vsa_step0_matches_ref
+ * ------------------------------------------------------------------------- */
+static int test_dit_tiny_vsa_step0_matches_ref(void) {
+    printf("--- Running test_dit_tiny_vsa_step0_matches_ref ---\n");
+    char pbuf[512], pbuf2[512], pbuf3[512];
+    const char *globals_path = resolve_path("tests/fixtures/tiny_h3/dit_globals.bin", pbuf, sizeof(pbuf));
+    const char *adaln_path = resolve_path("tests/fixtures/tiny_h3/adaln_table.bin", pbuf2, sizeof(pbuf2));
+    const char *trunk_path = resolve_path("tests/fixtures/tiny_h3/dit_trunk.bin", pbuf3, sizeof(pbuf3));
+
+    Fh3DitCfg cfg = get_tiny_cfg();
+    cfg.attn = FH3_ATTN_VSA;
+    cfg.vsa.tile = 64;
+    cfg.vsa.sparsity = 0.8f;
+
+    Fh3Dit *dit = NULL;
+    int rc = fh3_dit_open(globals_path, adaln_path, &cfg, &dit);
+    TEST_ASSERT(rc == FH3_OK);
+    TEST_ASSERT(dit != NULL);
+
+    Fh3Trunk trunk;
+    rc = fh3_trunk_open(trunk_path, 50 * 1024 * 1024ULL, &trunk);
+    TEST_ASSERT(rc == FH3_OK);
+
+    double *pos = (double *)read_file_bytes("tests/fixtures/tiny_h3/pos.bin", NULL);
+    float *x_v = (float *)read_file_bytes("tests/fixtures/tiny_h3/x_video.bin", NULL);
+    float *x_a = (float *)read_file_bytes("tests/fixtures/tiny_h3/x_audio.bin", NULL);
+    float *text_emb = (float *)read_file_bytes("tests/fixtures/tiny_h3/text_emb.bin", NULL);
+    float *ref_v0 = (float *)read_file_bytes("tests/fixtures/tiny_h3/video_v_vsa_step0.bin", NULL);
+    float *ref_a0 = (float *)read_file_bytes("tests/fixtures/tiny_h3/audio_v_vsa_step0.bin", NULL);
+    TEST_ASSERT(pos && x_v && x_a && text_emb && ref_v0 && ref_a0);
+
+    Fh3SeqSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.num_text = 6;
+    spec.num_audio = 4;
+    spec.num_video = 8;
+    spec.custom_pos = pos;
+
+    Fh3Seq seq;
+    rc = fh3_seq_build(&spec, &seq);
+    TEST_ASSERT(rc == FH3_OK);
+
+    float text_rows[6 * 256];
+    rc = fh3_dit_prepare_text(dit, text_emb, 6, text_rows);
+    TEST_ASSERT(rc == FH3_OK);
+
+    float v_video[8 * 96];
+    float v_audio[4 * 32];
+    rc = fh3_dit_forward(dit, &trunk, &seq, 0, x_v, x_a, text_rows, v_video, v_audio);
+    TEST_ASSERT(rc == FH3_OK);
+
+    float rel_v = compute_rel_l2(v_video, ref_v0, 8 * 96);
+    float rel_a = compute_rel_l2(v_audio, ref_a0, 4 * 32);
+    printf("  vsa step 0 rel-L2: video = %e, audio = %e\n", rel_v, rel_a);
+    TEST_ASSERT(rel_v <= 1e-4f);
+    TEST_ASSERT(rel_a <= 1e-4f);
+
+    free(pos); free(x_v); free(x_a); free(text_emb); free(ref_v0); free(ref_a0);
+    fh3_seq_free(&seq);
+    fh3_trunk_close(&trunk);
+    fh3_dit_close(dit);
+    return 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Test 6: dit_tiny_vsa_step7_matches_ref
+ * ------------------------------------------------------------------------- */
+static int test_dit_tiny_vsa_step7_matches_ref(void) {
+    printf("--- Running test_dit_tiny_vsa_step7_matches_ref ---\n");
+    char pbuf[512], pbuf2[512], pbuf3[512];
+    const char *globals_path = resolve_path("tests/fixtures/tiny_h3/dit_globals.bin", pbuf, sizeof(pbuf));
+    const char *adaln_path = resolve_path("tests/fixtures/tiny_h3/adaln_table.bin", pbuf2, sizeof(pbuf2));
+    const char *trunk_path = resolve_path("tests/fixtures/tiny_h3/dit_trunk.bin", pbuf3, sizeof(pbuf3));
+
+    Fh3DitCfg cfg = get_tiny_cfg();
+    cfg.attn = FH3_ATTN_VSA;
+    cfg.vsa.tile = 64;
+    cfg.vsa.sparsity = 0.8f;
+
+    Fh3Dit *dit = NULL;
+    int rc = fh3_dit_open(globals_path, adaln_path, &cfg, &dit);
+    TEST_ASSERT(rc == FH3_OK);
+    TEST_ASSERT(dit != NULL);
+
+    Fh3Trunk trunk;
+    rc = fh3_trunk_open(trunk_path, 50 * 1024 * 1024ULL, &trunk);
+    TEST_ASSERT(rc == FH3_OK);
+
+    double *pos = (double *)read_file_bytes("tests/fixtures/tiny_h3/pos.bin", NULL);
+    float *x_v = (float *)read_file_bytes("tests/fixtures/tiny_h3/x_video.bin", NULL);
+    float *x_a = (float *)read_file_bytes("tests/fixtures/tiny_h3/x_audio.bin", NULL);
+    float *text_emb = (float *)read_file_bytes("tests/fixtures/tiny_h3/text_emb.bin", NULL);
+    float *ref_v7 = (float *)read_file_bytes("tests/fixtures/tiny_h3/video_v_vsa_step7.bin", NULL);
+    float *ref_a7 = (float *)read_file_bytes("tests/fixtures/tiny_h3/audio_v_vsa_step7.bin", NULL);
+    TEST_ASSERT(pos && x_v && x_a && text_emb && ref_v7 && ref_a7);
+
+    Fh3SeqSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.num_text = 6;
+    spec.num_audio = 4;
+    spec.num_video = 8;
+    spec.custom_pos = pos;
+
+    Fh3Seq seq;
+    rc = fh3_seq_build(&spec, &seq);
+    TEST_ASSERT(rc == FH3_OK);
+
+    float text_rows[6 * 256];
+    rc = fh3_dit_prepare_text(dit, text_emb, 6, text_rows);
+    TEST_ASSERT(rc == FH3_OK);
+
+    float v_video[8 * 96];
+    float v_audio[4 * 32];
+    rc = fh3_dit_forward(dit, &trunk, &seq, 7, x_v, x_a, text_rows, v_video, v_audio);
+    TEST_ASSERT(rc == FH3_OK);
+
+    float rel_v = compute_rel_l2(v_video, ref_v7, 8 * 96);
+    float rel_a = compute_rel_l2(v_audio, ref_a7, 4 * 32);
+    printf("  vsa step 7 rel-L2: video = %e, audio = %e\n", rel_v, rel_a);
+    TEST_ASSERT(rel_v <= 1e-4f);
+    TEST_ASSERT(rel_a <= 1e-4f);
+
+    free(pos); free(x_v); free(x_a); free(text_emb); free(ref_v7); free(ref_a7);
+    fh3_seq_free(&seq);
+    fh3_trunk_close(&trunk);
+    fh3_dit_close(dit);
+    return 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Test 7: dit_tiny_vsa_sparsity0_matches_dense
+ * ------------------------------------------------------------------------- */
+static int test_dit_tiny_vsa_sparsity0_matches_dense(void) {
+    printf("--- Running test_dit_tiny_vsa_sparsity0_matches_dense ---\n");
+    char pbuf[512], pbuf2[512], pbuf3[512];
+    const char *globals_path = resolve_path("tests/fixtures/tiny_h3/dit_globals.bin", pbuf, sizeof(pbuf));
+    const char *adaln_path = resolve_path("tests/fixtures/tiny_h3/adaln_table.bin", pbuf2, sizeof(pbuf2));
+    const char *trunk_path = resolve_path("tests/fixtures/tiny_h3/dit_trunk.bin", pbuf3, sizeof(pbuf3));
+
+    Fh3DitCfg cfg = get_tiny_cfg();
+    cfg.attn = FH3_ATTN_VSA;
+    cfg.vsa.tile = 64;
+    cfg.vsa.sparsity = 0.0f;
+
+    Fh3Dit *dit = NULL;
+    int rc = fh3_dit_open(globals_path, adaln_path, &cfg, &dit);
+    TEST_ASSERT(rc == FH3_OK);
+    TEST_ASSERT(dit != NULL);
+
+    Fh3Trunk trunk;
+    rc = fh3_trunk_open(trunk_path, 50 * 1024 * 1024ULL, &trunk);
+    TEST_ASSERT(rc == FH3_OK);
+
+    double *pos = (double *)read_file_bytes("tests/fixtures/tiny_h3/pos.bin", NULL);
+    float *x_v = (float *)read_file_bytes("tests/fixtures/tiny_h3/x_video.bin", NULL);
+    float *x_a = (float *)read_file_bytes("tests/fixtures/tiny_h3/x_audio.bin", NULL);
+    float *text_emb = (float *)read_file_bytes("tests/fixtures/tiny_h3/text_emb.bin", NULL);
+    float *ref_v0 = (float *)read_file_bytes("tests/fixtures/tiny_h3/video_v_step0.bin", NULL);
+    float *ref_a0 = (float *)read_file_bytes("tests/fixtures/tiny_h3/audio_v_step0.bin", NULL);
+    TEST_ASSERT(pos && x_v && x_a && text_emb && ref_v0 && ref_a0);
+
+    Fh3SeqSpec spec;
+    memset(&spec, 0, sizeof(spec));
+    spec.num_text = 6;
+    spec.num_audio = 4;
+    spec.num_video = 8;
+    spec.custom_pos = pos;
+
+    Fh3Seq seq;
+    rc = fh3_seq_build(&spec, &seq);
+    TEST_ASSERT(rc == FH3_OK);
+
+    float text_rows[6 * 256];
+    rc = fh3_dit_prepare_text(dit, text_emb, 6, text_rows);
+    TEST_ASSERT(rc == FH3_OK);
+
+    float v_video[8 * 96];
+    float v_audio[4 * 32];
+    rc = fh3_dit_forward(dit, &trunk, &seq, 0, x_v, x_a, text_rows, v_video, v_audio);
+    TEST_ASSERT(rc == FH3_OK);
+
+    float rel_v = compute_rel_l2(v_video, ref_v0, 8 * 96);
+    float rel_a = compute_rel_l2(v_audio, ref_a0, 4 * 32);
+    printf("  vsa (sparsity 0) step 0 rel-L2 vs dense: video = %e, audio = %e\n", rel_v, rel_a);
+    TEST_ASSERT(rel_v <= 1e-4f);
+    TEST_ASSERT(rel_a <= 1e-4f);
+
+    free(pos); free(x_v); free(x_a); free(text_emb); free(ref_v0); free(ref_a0);
+    fh3_seq_free(&seq);
+    fh3_trunk_close(&trunk);
+    fh3_dit_close(dit);
+    return 0;
+}
+
 int main(void) {
     printf("=== Starting test_dit_tiny suite ===\n");
     test_dit_tiny_step0_matches_torch();
     test_dit_tiny_step7_matches_torch();
     test_dit_tiny_streamed_eq_pinned();
     test_refiner_runs_once();
+    test_dit_tiny_vsa_step0_matches_ref();
+    test_dit_tiny_vsa_step7_matches_ref();
+    test_dit_tiny_vsa_sparsity0_matches_dense();
 
     if (g_failures > 0) {
         fprintf(stderr, "=== test_dit_tiny FAILED with %d failure(s) ===\n", g_failures);

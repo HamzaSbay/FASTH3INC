@@ -23,6 +23,9 @@ typedef struct Fh3SeqSpec {
     int audio_latents;        /* Audio latents per channel */
     int audio_channels;       /* Audio channels (e.g. 2) */
     const double *custom_pos; /* If non-NULL, [N * 3] fp64 positions (t, h, w) */
+    int grid_t;               /* Optional explicit video grid (t, h, w) in tokens/patches */
+    int grid_h;
+    int grid_w;
 } Fh3SeqSpec;
 
 struct Fh3Seq {
@@ -30,6 +33,9 @@ struct Fh3Seq {
     int num_text;             /* T */
     int num_audio;            /* A */
     int num_video;            /* V */
+    int grid_t;               /* video grid (t, h, w) in tokens/patches */
+    int grid_h;
+    int grid_w;
     int *tags;                /* [N] modality tags: 0 video, 1 text, 2 audio */
     int *pair_index;          /* [N] pair indices for AdaLN table: 0 video, 1 text, 2 audio */
     double *pos;              /* [N * 3] fp64 position coordinates (t, h, w) */

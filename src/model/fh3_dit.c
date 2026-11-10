@@ -7,6 +7,7 @@
 #include "model/fh3_seq.h"
 #include "model/fh3_dit.h"
 #include "core/fh3_quant.h"
+#include "core/fh3_vsa.h"
 
 static const float *load_tensor_f32(Fh3Dit *m, const char *name) {
     const Fh3Tensor *t = fh3_gguf_find(&m->globals_gguf, name);
@@ -320,9 +321,13 @@ int fh3_dit_forward(
     float *fc1_buf     = (float *)malloc((size_t)N * 2 * (size_t)ffn_dim * sizeof(float));
     float *swiglu_buf  = (float *)malloc((size_t)N * (size_t)ffn_dim * sizeof(float));
     float *fc2_buf     = (float *)malloc((size_t)N * (size_t)hidden * sizeof(float));
+    float *gate_compress_buf = (m->cfg.attn == FH3_ATTN_VSA)
+        ? (float *)malloc((size_t)N * (size_t)inner_dim * sizeof(float))
+        : NULL;
 
     if (!h || !residual || !normed || !shift_buf || !scale_buf || !gate_buf ||
-        !qkv || !q || !k || !v || !attn_out || !proj_out || !fc1_buf || !swiglu_buf || !fc2_buf) {
+        !qkv || !q || !k || !v || !attn_out || !proj_out || !fc1_buf || !swiglu_buf || !fc2_buf ||
+        (m->cfg.attn == FH3_ATTN_VSA && !gate_compress_buf)) {
         if (h) free(h);
         if (residual) free(residual);
         if (normed) free(normed);
@@ -338,6 +343,7 @@ int fh3_dit_forward(
         if (fc1_buf) free(fc1_buf);
         if (swiglu_buf) free(swiglu_buf);
         if (fc2_buf) free(fc2_buf);
+        if (gate_compress_buf) free(gate_compress_buf);
         return FH3_E_NOMEM;
     }
 
@@ -357,6 +363,7 @@ int fh3_dit_forward(
             free(h); free(residual); free(normed); free(shift_buf); free(scale_buf); free(gate_buf);
             free(qkv); free(q); free(k); free(v); free(attn_out); free(proj_out);
             free(fc1_buf); free(swiglu_buf); free(fc2_buf);
+            if (gate_compress_buf) free(gate_compress_buf);
             return FH3_ERR;
         }
 
@@ -393,7 +400,16 @@ int fh3_dit_forward(
         fh3_rope3(q, seq->cos, seq->sin, N, num_heads, head_dim, 96);
         fh3_rope3(k, seq->cos, seq->sin, N, num_heads, head_dim, 96);
 
-        fh3_attention(q, k, v, attn_out, N, num_heads, head_dim);
+        if (m->cfg.attn == FH3_ATTN_VSA) {
+            const float *gate_ptr = NULL;
+            if (view.gate_compress.data != NULL && view.gate_compress.out > 0 && gate_compress_buf) {
+                fh3_matmul(&view.gate_compress, normed, gate_compress_buf, N, NULL);
+                gate_ptr = gate_compress_buf;
+            }
+            fh3_vsa_attention(&m->cfg.vsa, q, k, v, gate_ptr, attn_out, seq, num_heads, head_dim);
+        } else {
+            fh3_attention(q, k, v, attn_out, N, num_heads, head_dim);
+        }
 
         fh3_matmul(&view.out, attn_out, proj_out, N, NULL);
 
@@ -447,5 +463,6 @@ int fh3_dit_forward(
     free(h); free(residual); free(normed); free(shift_buf); free(scale_buf); free(gate_buf);
     free(qkv); free(q); free(k); free(v); free(attn_out); free(proj_out);
     free(fc1_buf); free(swiglu_buf); free(fc2_buf);
+    if (gate_compress_buf) free(gate_compress_buf);
     return FH3_OK;
 }

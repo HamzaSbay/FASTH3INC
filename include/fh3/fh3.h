@@ -16,7 +16,15 @@ typedef struct Fh3TeCfg Fh3TeCfg;
 typedef struct Fh3Seq Fh3Seq;
 typedef struct Fh3SeqSpec Fh3SeqSpec;
 typedef struct Fh3Sched Fh3Sched;
-typedef struct Fh3VsaCfg Fh3VsaCfg;
+typedef enum {
+    FH3_ATTN_DENSE = 0,
+    FH3_ATTN_VSA   = 1,
+} Fh3AttnType;
+
+typedef struct Fh3VsaCfg {
+    int tile;      /* default 64 */
+    float sparsity; /* default 0.8f */
+} Fh3VsaCfg;
 typedef struct Fh3File Fh3File;
 typedef struct Fh3Gguf Fh3Gguf;
 typedef struct Fh3Tensor Fh3Tensor;
@@ -85,6 +93,8 @@ void fh3_swiglu(const float *in, float *out, int n, int F);
 void fh3_modulate(float *x, const float *shift, const float *scale, int n, int dim);
 void fh3_gate_residual(float *h, const float *gate, const float *y, int n, int dim);
 void fh3_attention(const float *q, const float *k, const float *v, float *o, int n, int heads, int hd);
+void fh3_vsa_attention(const Fh3VsaCfg *c, const float *q, const float *k, const float *v,
+                       const float *gate, float *o, const Fh3Seq *seq, int heads, int head_dim);
 void fh3_timestep_embed(const double *t, int nt, int freq_dim, float *out);
 
 /* Packed trunk operations */

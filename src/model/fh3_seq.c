@@ -24,6 +24,23 @@ int fh3_seq_build(const Fh3SeqSpec *s, Fh3Seq *out) {
     out->num_audio = A;
     out->num_video = V;
 
+    if (s->grid_t > 0 && s->grid_h > 0 && s->grid_w > 0) {
+        out->grid_t = s->grid_t;
+        out->grid_h = s->grid_h;
+        out->grid_w = s->grid_w;
+    } else if (s->latent_height > 0 && s->latent_width > 0) {
+        int pt = (s->patch_t > 0) ? s->patch_t : 1;
+        int ph = (s->patch_h > 0) ? s->patch_h : 2;
+        int pw = (s->patch_w > 0) ? s->patch_w : 2;
+        out->grid_t = (s->latent_frames > 0) ? (s->latent_frames / pt) : 1;
+        out->grid_h = s->latent_height / ph;
+        out->grid_w = s->latent_width / pw;
+    } else if (V > 0) {
+        out->grid_t = 1;
+        out->grid_h = 1;
+        out->grid_w = V;
+    }
+
     out->tags = (int *)malloc((size_t)N * sizeof(int));
     out->pair_index = (int *)malloc((size_t)N * sizeof(int));
     out->pos = (double *)malloc((size_t)N * 3 * sizeof(double));

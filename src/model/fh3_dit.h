@@ -16,6 +16,8 @@ extern "C" {
 #endif
 
 struct Fh3DitCfg {
+    int attn;                 /* FH3_ATTN_DENSE or FH3_ATTN_VSA */
+    Fh3VsaCfg vsa;            /* VSA configuration (tile, sparsity) */
     int hidden_size;          /* e.g. 256 for tiny, 5376 for full */
     int num_heads;            /* e.g. 2 for tiny, 56 for full */
     int head_dim;             /* e.g. 128 */
