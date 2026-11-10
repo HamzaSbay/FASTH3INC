@@ -101,12 +101,13 @@ int main(int argc, char **argv) {
     Fh3ResolvedDims dims;
     memset(&dims, 0, sizeof(dims));
 
+    fh3_cli_preset_dims(args.preset, &dims);
     if (args.width > 0 || args.height > 0 || args.frames > 0) {
-        /* User specified explicit dimensions -> snap */
-        fh3_cli_snap_dims(args.width, args.height, args.frames, &dims);
-    } else {
-        /* Use preset */
-        fh3_cli_preset_dims(args.preset, &dims);
+        /* User specified explicit dimensions -> override preset and snap */
+        int w = args.width > 0 ? args.width : dims.width;
+        int h = args.height > 0 ? args.height : dims.height;
+        int f = args.frames > 0 ? args.frames : dims.frames;
+        fh3_cli_snap_dims(w, h, f, &dims);
     }
 
     printf("[fh3] Resolved size: %dx%d, %d frames (latent: %dx%d, %d frames)\n",

@@ -100,6 +100,11 @@ def test_cli_snaps_resolution():
     assert res2.returncode == 0
     assert "Resolved size: 640x384, 39 frames" in res2.stdout
 
+    # Preset + override: tiny preset with custom frame count
+    res3 = run_fh3("run", "--preset", "tiny", "--frames", "39", "--dry-run")
+    assert res3.returncode == 0
+    assert "Resolved size: 448x256, 39 frames" in res3.stdout
+
 
 def test_cli_refuses_low_mem(tmp_path):
     """Verify --mem-gb 0.0001 triggers preflight memory refusal and exits with code 3."""

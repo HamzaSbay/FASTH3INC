@@ -104,10 +104,16 @@ uint64_t fh3_cli_free_disk_space(const char *path) {
     if (GetDiskFreeSpaceExA(check_path, &free_bytes, &total_bytes, &total_free)) {
         return (uint64_t)free_bytes.QuadPart;
     }
+    if (GetDiskFreeSpaceExA(".", &free_bytes, &total_bytes, &total_free)) {
+        return (uint64_t)free_bytes.QuadPart;
+    }
     return 0;
 #else
     struct statvfs sv;
     if (statvfs(check_path, &sv) == 0) {
+        return (uint64_t)sv.f_bavail * (uint64_t)sv.f_frsize;
+    }
+    if (statvfs(".", &sv) == 0) {
         return (uint64_t)sv.f_bavail * (uint64_t)sv.f_frsize;
     }
     return 0;
@@ -122,7 +128,8 @@ const char *fh3_cli_resolve_path(const char *path, char *buf, size_t cap) {
         fclose(fp);
         return path;
     }
-    if (cap > 4) {
+    size_t plen = strlen(path);
+    if (cap > plen + 4) {
         snprintf(buf, cap, "../%s", path);
         fp = fopen(buf, "rb");
         if (fp) {
@@ -130,7 +137,7 @@ const char *fh3_cli_resolve_path(const char *path, char *buf, size_t cap) {
             return buf;
         }
     }
-    if (cap > 7) {
+    if (cap > plen + 7) {
         snprintf(buf, cap, "../../%s", path);
         fp = fopen(buf, "rb");
         if (fp) {
@@ -534,7 +541,7 @@ int fh3_cli_doctor(const Fh3CliArgs *args) {
     }
 
     for (int i = 0; i < 7; i++) {
-        char pbuf[512];
+        char pbuf[1024];
         const char *resolved = fh3_cli_resolve_path(files_to_check[i], pbuf, sizeof(pbuf));
         FILE *f = fopen(resolved, "rb");
         if (f) {
@@ -638,7 +645,7 @@ int fh3_cli_run_phase1(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
         }
         T = (int)(sz / sizeof(int));
     } else {
-        char pbuf1[512], pbuf2[512];
+        char pbuf1[1024], pbuf2[1024];
         const char *vocab_path = fh3_cli_resolve_path("tests/fixtures/tok/vocab.json", pbuf1, sizeof(pbuf1));
         const char *merges_path = fh3_cli_resolve_path("tests/fixtures/tok/merges.txt", pbuf2, sizeof(pbuf2));
 
@@ -680,7 +687,7 @@ int fh3_cli_run_phase1(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     printf("[fh3:Phase1] Prompt tokenized to %d tokens\n", T);
 
     /* 3. Text Encoder config and paths */
-    char pbuf_trunk[512], pbuf_embed[512];
+    char pbuf_trunk[1024], pbuf_embed[1024];
     const char *trunk_path = NULL;
     const char *embed_path = NULL;
     Fh3TeCfg te_cfg;
@@ -700,7 +707,7 @@ int fh3_cli_run_phase1(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
         te_cfg.rope_theta = 5000000.0f;
     } else {
         const char *base = args->models_dir[0] ? args->models_dir : "packed";
-        char t_str[512], e_str[512];
+        char t_str[1024], e_str[1024];
         snprintf(t_str, sizeof(t_str), "%s/te_trunk.bin", base);
         snprintf(e_str, sizeof(e_str), "%s/te_embed.bin", base);
         trunk_path = fh3_cli_resolve_path(t_str, pbuf_trunk, sizeof(pbuf_trunk));
@@ -763,7 +770,7 @@ int fh3_cli_run_phase1(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     }
 
     /* Save prompt.emb to disk: T (int32), hidden_size (int32), then data */
-    char out_emb_path[512];
+    char out_emb_path[1024];
     snprintf(out_emb_path, sizeof(out_emb_path), "%s/prompt.emb", args->out_dir);
     FILE *fp_out = fopen(out_emb_path, "wb");
     if (!fp_out) {
@@ -790,7 +797,7 @@ int fh3_cli_run_phase1(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
 static int save_checkpoint(const char *out_dir, int step,
                            const float *x_v, size_t n_v,
                            const float *x_a, size_t n_a) {
-    char chk_path[512];
+    char chk_path[1024];
     snprintf(chk_path, sizeof(chk_path), "%s/latents.step%d.bin", out_dir, step);
     FILE *fp = fopen(chk_path, "wb");
     if (!fp) return -1;
@@ -807,7 +814,7 @@ static int save_checkpoint(const char *out_dir, int step,
 static int load_checkpoint(const char *out_dir, int step,
                            float *x_v, size_t n_v,
                            float *x_a, size_t n_a) {
-    char chk_path[512];
+    char chk_path[1024];
     snprintf(chk_path, sizeof(chk_path), "%s/latents.step%d.bin", out_dir, step);
     FILE *fp = fopen(chk_path, "rb");
     if (!fp) return -1;
@@ -830,12 +837,12 @@ int fh3_cli_run_phase2(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     fh3_cli_mkdir_p(args->out_dir);
 
     /* 1. Read prompt embeddings */
-    char emb_path[512];
+    char emb_path[1024];
     snprintf(emb_path, sizeof(emb_path), "%s/prompt.emb", args->out_dir);
     FILE *fp_emb = fopen(emb_path, "rb");
     if (!fp_emb) {
         /* If missing, try fixture text_emb.bin */
-        char pbuf[512];
+        char pbuf[1024];
         const char *t_emb_fix = fh3_cli_resolve_path("tests/fixtures/tiny_h3/text_emb.bin", pbuf, sizeof(pbuf));
         fp_emb = fopen(t_emb_fix, "rb");
         if (!fp_emb) {
@@ -865,7 +872,7 @@ int fh3_cli_run_phase2(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     fclose(fp_emb);
 
     /* 2. DiT config and paths */
-    char pbuf_g[512], pbuf_a[512], pbuf_t[512];
+    char pbuf_g[1024], pbuf_a[1024], pbuf_t[1024];
     const char *globals_path = NULL;
     const char *adaln_path = NULL;
     const char *trunk_path = NULL;
@@ -898,7 +905,7 @@ int fh3_cli_run_phase2(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
         dit_cfg.rope_theta = 10000.0f;
     } else {
         const char *base = args->models_dir[0] ? args->models_dir : "packed";
-        char g_str[512], a_str[512], t_str[512];
+        char g_str[1024], a_str[1024], t_str[1024];
         snprintf(g_str, sizeof(g_str), "%s/dit_globals.bin", base);
         snprintf(a_str, sizeof(a_str), "%s/adaln_table.bin", base);
         snprintf(t_str, sizeof(t_str), "%s/dit_trunk.bin", base);
@@ -1090,7 +1097,7 @@ int fh3_cli_run_phase2(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
         /* Sampler update */
         if (step < 7) {
             if (args->is_tiny) {
-                char nv_path[512], na_path[512], p_nv[512], p_na[512];
+                char nv_path[1024], na_path[1024], p_nv[1024], p_na[1024];
                 snprintf(nv_path, sizeof(nv_path), "tests/fixtures/tiny_h3/noise_v_step%d.bin", step);
                 snprintf(na_path, sizeof(na_path), "tests/fixtures/tiny_h3/noise_a_step%d.bin", step);
                 fh3_load_noise(fh3_cli_resolve_path(nv_path, p_nv, sizeof(p_nv)), noise_v, n_v_floats);
@@ -1124,7 +1131,7 @@ int fh3_cli_run_phase2(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
 
     /* If finished completely, save final latents */
     if (exit_status == FH3_EXIT_OK) {
-        char v_lat_path[512], a_lat_path[512];
+        char v_lat_path[1024], a_lat_path[1024];
         snprintf(v_lat_path, sizeof(v_lat_path), "%s/video_latents.bin", args->out_dir);
         snprintf(a_lat_path, sizeof(a_lat_path), "%s/audio_latents.bin", args->out_dir);
 
@@ -1173,13 +1180,13 @@ int fh3_cli_run_phase3(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     /* ---------------------------------------------------------------------
      * Part A: BigVGAN Audio Decoder
      * --------------------------------------------------------------------- */
-    char pbuf_a[512];
+    char pbuf_a[1024];
     const char *audio_dec_path = NULL;
     if (args->is_tiny) {
         audio_dec_path = fh3_cli_resolve_path("tests/fixtures/tiny_vae_audio/vae_audio_dec.bin", pbuf_a, sizeof(pbuf_a));
     } else {
         const char *base = args->models_dir[0] ? args->models_dir : "packed";
-        char a_str[512];
+        char a_str[1024];
         snprintf(a_str, sizeof(a_str), "%s/vae_audio_dec.bin", base);
         audio_dec_path = fh3_cli_resolve_path(a_str, pbuf_a, sizeof(pbuf_a));
     }
@@ -1202,7 +1209,7 @@ int fh3_cli_run_phase3(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     }
 
     /* Load audio latents from disk or tiny fixture */
-    char a_lat_path[512];
+    char a_lat_path[1024];
     snprintf(a_lat_path, sizeof(a_lat_path), "%s/audio_latents.bin", args->out_dir);
     FILE *fp_al = fopen(a_lat_path, "rb");
     if (fp_al) {
@@ -1244,7 +1251,7 @@ int fh3_cli_run_phase3(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     }
 
     /* Write out.wav */
-    char wav_path[512];
+    char wav_path[1024];
     snprintf(wav_path, sizeof(wav_path), "%s/out.wav", args->out_dir);
     int rc_wav = fh3_wav_write(wav_path, pcm, 2, (int64_t)num_audio_frames * a_upsample, 32000);
     free(pcm);
@@ -1257,13 +1264,13 @@ int fh3_cli_run_phase3(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     /* ---------------------------------------------------------------------
      * Part B: Video ViT VAE Decoder
      * --------------------------------------------------------------------- */
-    char pbuf_v[512];
+    char pbuf_v[1024];
     const char *video_dec_path = NULL;
     if (args->is_tiny) {
         video_dec_path = fh3_cli_resolve_path("tests/fixtures/tiny_vae_video/vae_video_dec.bin", pbuf_v, sizeof(pbuf_v));
     } else {
         const char *base = args->models_dir[0] ? args->models_dir : "packed";
-        char v_str[512];
+        char v_str[1024];
         snprintf(v_str, sizeof(v_str), "%s/vae_video_dec.bin", base);
         video_dec_path = fh3_cli_resolve_path(v_str, pbuf_v, sizeof(pbuf_v));
     }
@@ -1291,7 +1298,7 @@ int fh3_cli_run_phase3(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     }
 
     /* Load video latents from disk */
-    char v_lat_path[512];
+    char v_lat_path[1024];
     snprintf(v_lat_path, sizeof(v_lat_path), "%s/video_latents.bin", args->out_dir);
     FILE *fp_vl = fopen(v_lat_path, "rb");
 
@@ -1347,7 +1354,7 @@ int fh3_cli_run_phase3(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
     if (fp_vl) fclose(fp_vl);
 
     /* Open Y4M output file */
-    char y4m_path[512];
+    char y4m_path[1024];
     snprintf(y4m_path, sizeof(y4m_path), "%s/out.y4m", args->out_dir);
     Fh3Y4m *y4m = NULL;
     int rc_y4m = fh3_y4m_open(y4m_path, out_w, out_h, 24, 1, &y4m);
