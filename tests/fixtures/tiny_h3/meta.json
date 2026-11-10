@@ -1,0 +1,20 @@
+{
+  "num_text": 6,
+  "num_audio": 4,
+  "num_video": 8,
+  "seq_len": 18,
+  "hidden_size": 256,
+  "num_heads": 2,
+  "head_dim": 128,
+  "num_layers": 3,
+  "num_refiner_layers": 2,
+  "ffn_dim": 512,
+  "text_dim": 64,
+  "video_patch_dim": 96,
+  "audio_patch_dim": 32,
+  "patch_size": [
+    1,
+    2,
+    2
+  ]
+}

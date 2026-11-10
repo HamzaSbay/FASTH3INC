@@ -271,9 +271,22 @@ def pack_dit(
 
             for t in non_block_tensors:
                 raw_bytes = _read_tensor_bytes(src, hdr, t)
-                raw_arr = np.frombuffer(raw_bytes, dtype=np.uint8)
                 qtype = getattr(GGMLQuantizationType, t.type, GGMLQuantizationType.F32)
-                writer.add_tensor(t.name, raw_arr, raw_dtype=qtype)
+                if t.type == "F32":
+                    arr = np.frombuffer(raw_bytes, dtype=np.float32).reshape(t.dims[::-1])
+                    writer.add_tensor(t.name, arr)
+                elif t.type == "F16":
+                    arr = np.frombuffer(raw_bytes, dtype=np.float16).reshape(t.dims[::-1])
+                    writer.add_tensor(t.name, arr)
+                else:
+                    if len(t.dims) >= 2:
+                        ne0, ne1 = t.dims[0], t.dims[1]
+                        block_size, type_size = gguf.GGML_QUANT_SIZES[qtype]
+                        row_bytes = (ne0 // block_size) * type_size
+                        raw_arr = np.frombuffer(raw_bytes, dtype=np.uint8).reshape(ne1, row_bytes)
+                    else:
+                        raw_arr = np.frombuffer(raw_bytes, dtype=np.uint8)
+                    writer.add_tensor(t.name, raw_arr, raw_dtype=qtype)
 
             writer.write_header_to_file()
             writer.write_kv_data_to_file()

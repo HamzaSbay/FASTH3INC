@@ -11,8 +11,10 @@ extern "C" {
 
 /* Forward declarations of core engine types */
 typedef struct Fh3DitCfg Fh3DitCfg;
+typedef struct Fh3Dit Fh3Dit;
 typedef struct Fh3TeCfg Fh3TeCfg;
 typedef struct Fh3Seq Fh3Seq;
+typedef struct Fh3SeqSpec Fh3SeqSpec;
 typedef struct Fh3Sched Fh3Sched;
 typedef struct Fh3VsaCfg Fh3VsaCfg;
 typedef struct Fh3File Fh3File;
@@ -110,6 +112,19 @@ void fh3_trunk_close(Fh3Trunk *t);
 void fh3_trunk_prefetch(Fh3Trunk *t, int L);
 const uint8_t *fh3_trunk_acquire(Fh3Trunk *t, int L);
 Fh3TrunkStats fh3_trunk_stats(const Fh3Trunk *t);
+
+/* Sequence builder operations */
+int fh3_seq_build(const Fh3SeqSpec *s, Fh3Seq *out);
+void fh3_seq_free(Fh3Seq *seq);
+
+/* DiT transformer operations */
+int fh3_dit_open(const char *globals_path, const char *adaln_path, const Fh3DitCfg *cfg, Fh3Dit **out);
+void fh3_dit_close(Fh3Dit *m);
+int fh3_dit_refiner_count(const Fh3Dit *m);
+int fh3_dit_prepare_text(const Fh3Dit *m, const float *text_emb, int T, float *text_rows);
+int fh3_dit_forward(const Fh3Dit *m, Fh3Trunk *tr, const Fh3Seq *seq, int step,
+                    const float *x_video, const float *x_audio, const float *text_rows,
+                    float *v_video, float *v_audio);
 
 /* Execution plan & memory check */
 typedef struct Fh3Plan {
