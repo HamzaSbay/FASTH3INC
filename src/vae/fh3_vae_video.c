@@ -205,6 +205,22 @@ int fh3_vae_video_open(const char *path, Fh3VaeV **out) {
     m->rope_theta          = read_f32(base + 60);
     m->norm_eps            = read_f32(base + 64);
 
+    if (m->latent_channels != 24 || m->out_channels != 3 ||
+        m->dim <= 0 || m->heads <= 0 || m->dim_head <= 0 ||
+        m->dim != m->heads * m->dim_head ||
+        m->num_layers <= 0 || m->num_register_tokens < 0 ||
+        m->patch_size <= 0 || m->patch_size_t <= 0 ||
+        m->ffn_mult <= 0 || m->clip_length <= 0 ||
+        m->rope_dim_ratio <= 0.0f || m->rope_dim_ratio > 1.0f) {
+        fh3_vae_video_close(m);
+        return FH3_E_INVALID;
+    }
+    int rotary_dim = (int)(m->dim_head * m->rope_dim_ratio);
+    if (rotary_dim <= 0 || rotary_dim % 6 != 0 || rotary_dim / 2 > 48) {
+        fh3_vae_video_close(m);
+        return FH3_E_INVALID;
+    }
+
     m->blocks = (Fh3VaeBlock *)calloc((size_t)m->num_layers, sizeof(Fh3VaeBlock));
     if (!m->blocks) {
         fh3_vae_video_close(m);
@@ -646,7 +662,7 @@ static int decode_vit_clip(
 }
 
 int fh3_vae_video_decode(const Fh3VaeV *m, const float *lat, int F, int h, int w, Fh3FrameSink *sink) {
-    if (!m || !lat || F <= 0 || h <= 0 || w <= 0) return FH3_E_INVALID;
+    if (!m || !lat || F <= 0 || h <= 0 || w <= 0 || (sink && !sink->write_frame)) return FH3_E_INVALID;
 
     int temporal_ratio = m->patch_size_t;
     int clip_length = m->clip_length;
@@ -663,6 +679,7 @@ int fh3_vae_video_decode(const Fh3VaeV *m, const float *lat, int F, int h, int w
     int pad_tokens = ((-num_tokens) % tokens_chunk_size + tokens_chunk_size) % tokens_chunk_size;
     int F_padded = F + pad_tokens;
     int num_chunks = (num_tokens + pad_tokens) / tokens_chunk_size - (token_drop > 0 ? 1 : 0);
+    if (num_chunks <= 0) return FH3_E_INVALID;
 
     /* Compute total target pixel frames after padding truncation */
     int pad_frames = 0;
@@ -784,7 +801,11 @@ int fh3_vae_video_decode(const Fh3VaeV *m, const float *lat, int F, int h, int w
                     }
 
                     if (sink && frames_emitted < total_frames_to_emit) {
-                        sink->write_frame(sink->user, frames_emitted, frame_temp, pixel_W, pixel_H);
+                        int sink_rc = sink->write_frame(sink->user, frames_emitted, frame_temp, pixel_W, pixel_H);
+                        if (sink_rc != FH3_OK) {
+                            free(lat_pq); free(clip_pixel_buf); free(overlap_buf); free(frame_temp); free(lat_clip_slice);
+                            return sink_rc;
+                        }
                     }
                     frames_emitted++;
                 }
@@ -811,7 +832,11 @@ int fh3_vae_video_decode(const Fh3VaeV *m, const float *lat, int F, int h, int w
         for (int t = 0; t < frame_overlap; t++) {
             if (sink && frames_emitted < total_frames_to_emit) {
                 const float *ov_frame = overlap_buf + (size_t)t * pixel_frame_sz;
-                sink->write_frame(sink->user, frames_emitted, ov_frame, pixel_W, pixel_H);
+                int sink_rc = sink->write_frame(sink->user, frames_emitted, ov_frame, pixel_W, pixel_H);
+                if (sink_rc != FH3_OK) {
+                    free(lat_pq); free(clip_pixel_buf); free(overlap_buf); free(frame_temp); free(lat_clip_slice);
+                    return sink_rc;
+                }
             }
             frames_emitted++;
         }

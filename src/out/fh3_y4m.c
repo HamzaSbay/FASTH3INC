@@ -147,9 +147,11 @@ void fh3_y4m_close(Fh3Y4m *y) {
 
 static int y4m_sink_cb(void *user, int frame_idx, const float *rgb, int width, int height) {
     (void)frame_idx;
-    (void)width;
-    (void)height;
-    return fh3_y4m_write_rgb((Fh3Y4m *)user, rgb);
+    Fh3Y4m *y = (Fh3Y4m *)user;
+    if (!y || !rgb || width != y->width || height != y->height) {
+        return FH3_E_INVALID;
+    }
+    return fh3_y4m_write_rgb(y, rgb);
 }
 
 Fh3FrameSink fh3_y4m_frame_sink(Fh3Y4m *y) {

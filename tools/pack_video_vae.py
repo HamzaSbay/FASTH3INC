@@ -136,6 +136,16 @@ def write_packed_vae_video(
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Wrap getter to ensure proper float32 unpacking (including bfloat16 bitcast)
+    _orig_getter = tensor_getter
+    def tensor_getter(k: str) -> np.ndarray:
+        t = _orig_getter(k)
+        if t.dtype == np.uint16:
+            return (t.astype(np.uint32) << 16).view(np.float32)
+        elif t.dtype != np.float32:
+            return t.astype(np.float32)
+        return t
+
     header_bytes = pack_header(
         latent_channels=latent_channels,
         out_channels=out_channels,
@@ -518,15 +528,14 @@ def pack_remote_or_local_safetensors(
             hdr_len_bytes = hf_range.read(shard_url, 0, 8)
             hdr_len = struct.unpack("<Q", hdr_len_bytes)[0]
             hdr_json_bytes = hf_range.read(shard_url, 8, 8 + hdr_len)
-            shard_headers[shard_file] = json.loads(hdr_json_bytes.decode("utf-8"))
+            shard_headers[shard_file] = (json.loads(hdr_json_bytes.decode("utf-8")), 8 + hdr_len)
 
-        tensor_info = shard_headers[shard_file][name]
+        hdr, data_base = shard_headers[shard_file]
+        tensor_info = hdr[name]
         dtype_str = tensor_info["dtype"]
         shape = tensor_info["shape"]
         offsets = tensor_info["data_offsets"]
 
-        hdr_len = struct.unpack("<Q", hf_range.read(shard_url, 0, 8))[0]
-        data_base = 8 + hdr_len
         raw = hf_range.read(shard_url, data_base + offsets[0], data_base + offsets[1])
 
         dtype_map = {
@@ -534,8 +543,12 @@ def pack_remote_or_local_safetensors(
             "F16": np.float16,
             "BF16": np.uint16,
         }
-        arr = np.frombuffer(raw, dtype=dtype_map.get(dtype_str, np.float32))
-        return arr.reshape(shape)
+        arr = np.frombuffer(raw, dtype=dtype_map.get(dtype_str, np.float32)).reshape(shape)
+        if dtype_str == "BF16":
+            arr = (arr.astype(np.uint32) << 16).view(np.float32)
+        elif arr.dtype != np.float32:
+            arr = arr.astype(np.float32)
+        return arr
 
     return write_packed_vae_video(
         out_path=out_path,
