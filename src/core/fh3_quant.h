@@ -18,6 +18,11 @@ static inline float fh3_f16_to_f32(uint16_t h) {
     uint32_t w = (uint32_t)h << 16;
     uint32_t sign = w & 0x80000000U;
     uint32_t nonsign = w & 0x7FFFFFFFU;
+    if (nonsign == 0) {
+        float out;
+        memcpy(&out, &sign, sizeof(float));
+        return out;
+    }
     uint32_t renorm_shift = __builtin_clz(nonsign);
     renorm_shift = renorm_shift > 5 ? renorm_shift - 5 : 0;
     int32_t inf_nan_mask = ((int32_t)(nonsign + 0x04000000U) >> 8) & 0x7F800000U;

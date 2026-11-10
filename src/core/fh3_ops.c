@@ -318,14 +318,15 @@ void fh3_matmul(const Fh3W *w, const float *x, float *y, int n_tok, const float 
     if (!w || !x || !y || n_tok <= 0 || w->in <= 0 || w->out <= 0) return;
 
     size_t row_bytes = fh3_row_bytes(w->type, w->in);
+    if (row_bytes == 0) return;
 
     #pragma omp parallel
     {
         float *tile_w = (float *)malloc(TILE_OUT * (size_t)w->in * sizeof(float));
-        if (tile_w) {
-            #pragma omp for schedule(static)
-            for (int64_t o0 = 0; o0 < w->out; o0 += TILE_OUT) {
-                int64_t tile_rows = (o0 + TILE_OUT <= w->out) ? TILE_OUT : (w->out - o0);
+        #pragma omp for schedule(static)
+        for (int64_t o0 = 0; o0 < w->out; o0 += TILE_OUT) {
+            if (!tile_w) continue;
+            int64_t tile_rows = (o0 + TILE_OUT <= w->out) ? TILE_OUT : (w->out - o0);
 
                 /* Dequantize tile once for all tokens */
                 for (int64_t r = 0; r < tile_rows; r++) {
@@ -398,7 +399,6 @@ void fh3_matmul(const Fh3W *w, const float *x, float *y, int n_tok, const float 
                 }
 #endif
             }
-            free(tile_w);
-        }
+        if (tile_w) free(tile_w);
     }
 }
