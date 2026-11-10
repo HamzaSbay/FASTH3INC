@@ -402,3 +402,323 @@ void fh3_matmul(const Fh3W *w, const float *x, float *y, int n_tok, const float 
         if (tile_w) free(tile_w);
     }
 }
+
+/* ========================================================================= */
+/* Elementwise ops and dense attention                                       */
+/* ========================================================================= */
+
+void fh3_rmsnorm(float *x, const float *w, int n, int dim, float eps) {
+    if (!x || !w || n <= 0 || dim <= 0) return;
+
+    #pragma omp parallel for schedule(static) if (n > 1)
+    for (int i = 0; i < n; i++) {
+        float *row = x + (size_t)i * (size_t)dim;
+
+        float sum = 0.0f;
+#if defined(__AVX2__)
+        int64_t d8 = dim - (dim % 8);
+        __m256 vsum = _mm256_setzero_ps();
+        for (int64_t d = 0; d < d8; d += 8) {
+            __m256 vx = _mm256_loadu_ps(row + d);
+            vsum = _mm256_fmadd_ps(vx, vx, vsum);
+        }
+        float acc[8];
+        _mm256_storeu_ps(acc, vsum);
+        sum = reduce_tree_8(acc);
+        for (int64_t d = d8; d < dim; d++) {
+            sum = fmaf(row[d], row[d], sum);
+        }
+#else
+        for (int64_t d = 0; d < dim; d++) {
+            sum = fmaf(row[d], row[d], sum);
+        }
+#endif
+        float variance = sum / (float)dim;
+        float inv_rms = 1.0f / sqrtf(variance + eps);
+
+#if defined(__AVX2__)
+        __m256 vinv = _mm256_set1_ps(inv_rms);
+        for (int64_t d = 0; d < d8; d += 8) {
+            __m256 vx = _mm256_loadu_ps(row + d);
+            __m256 vw = _mm256_loadu_ps(w + d);
+            __m256 vres = _mm256_mul_ps(_mm256_mul_ps(vx, vinv), vw);
+            _mm256_storeu_ps(row + d, vres);
+        }
+        for (int64_t d = d8; d < dim; d++) {
+            row[d] = row[d] * inv_rms * w[d];
+        }
+#else
+        for (int64_t d = 0; d < dim; d++) {
+            row[d] = row[d] * inv_rms * w[d];
+        }
+#endif
+    }
+}
+
+void fh3_rope3(float *x, const float *cos, const float *sin, int n, int heads, int head_dim, int rot_dim) {
+    if (!x || !cos || !sin || n <= 0 || heads <= 0 || head_dim <= 0 || rot_dim <= 0 || rot_dim > head_dim || (rot_dim % 2 != 0)) {
+        return;
+    }
+
+    int half_rot = rot_dim / 2;
+
+    #pragma omp parallel for collapse(2) schedule(static) if (n * heads > 4)
+    for (int i = 0; i < n; i++) {
+        for (int h = 0; h < heads; h++) {
+            const float *cos_i = cos + (size_t)i * (size_t)rot_dim;
+            const float *sin_i = sin + (size_t)i * (size_t)rot_dim;
+            float *vec = x + ((size_t)i * (size_t)heads + (size_t)h) * (size_t)head_dim;
+
+#if defined(__AVX2__)
+            int j8 = half_rot - (half_rot % 8);
+            for (int j = 0; j < j8; j += 8) {
+                __m256 vv0 = _mm256_loadu_ps(vec + j);
+                __m256 vv1 = _mm256_loadu_ps(vec + half_rot + j);
+                __m256 vc0 = _mm256_loadu_ps(cos_i + j);
+                __m256 vs0 = _mm256_loadu_ps(sin_i + j);
+                __m256 vc1 = _mm256_loadu_ps(cos_i + half_rot + j);
+                __m256 vs1 = _mm256_loadu_ps(sin_i + half_rot + j);
+
+                __m256 out0 = _mm256_sub_ps(_mm256_mul_ps(vv0, vc0), _mm256_mul_ps(vv1, vs0));
+                __m256 out1 = _mm256_add_ps(_mm256_mul_ps(vv1, vc1), _mm256_mul_ps(vv0, vs1));
+
+                _mm256_storeu_ps(vec + j, out0);
+                _mm256_storeu_ps(vec + half_rot + j, out1);
+            }
+            for (int j = j8; j < half_rot; j++) {
+                float v0 = vec[j];
+                float v1 = vec[half_rot + j];
+                vec[j]            = v0 * cos_i[j] - v1 * sin_i[j];
+                vec[half_rot + j] = v1 * cos_i[half_rot + j] + v0 * sin_i[half_rot + j];
+            }
+#else
+            for (int j = 0; j < half_rot; j++) {
+                float v0 = vec[j];
+                float v1 = vec[half_rot + j];
+                vec[j]            = v0 * cos_i[j] - v1 * sin_i[j];
+                vec[half_rot + j] = v1 * cos_i[half_rot + j] + v0 * sin_i[half_rot + j];
+            }
+#endif
+            /* channels rot_dim .. head_dim - 1 are untouched */
+        }
+    }
+}
+
+void fh3_swiglu(const float *in, float *out, int n, int F) {
+    if (!in || !out || n <= 0 || F <= 0) return;
+
+    #pragma omp parallel for schedule(static) if (n > 1)
+    for (int i = 0; i < n; i++) {
+        const float *val = in + (size_t)i * (2 * (size_t)F);
+        const float *gate = val + F;
+        float *row_out = out + (size_t)i * (size_t)F;
+
+        for (int j = 0; j < F; j++) {
+            float g = gate[j];
+            float silu_g;
+            if (g < -80.0f) {
+                silu_g = 0.0f;
+            } else {
+                silu_g = g / (1.0f + expf(-g));
+            }
+            row_out[j] = val[j] * silu_g;
+        }
+    }
+}
+
+void fh3_modulate(float *x, const float *shift, const float *scale, int n, int dim) {
+    if (!x || !shift || !scale || n <= 0 || dim <= 0) return;
+
+    int64_t total = (int64_t)n * (int64_t)dim;
+
+    #pragma omp parallel for schedule(static) if (total > 4096)
+    for (int64_t k0 = 0; k0 < total; k0 += 1024) {
+        int64_t k1 = (k0 + 1024 <= total) ? (k0 + 1024) : total;
+#if defined(__AVX2__)
+        int64_t k = k0;
+        __m256 vone = _mm256_set1_ps(1.0f);
+        for (; k + 8 <= k1; k += 8) {
+            __m256 vx = _mm256_loadu_ps(x + k);
+            __m256 vscale = _mm256_loadu_ps(scale + k);
+            __m256 vshift = _mm256_loadu_ps(shift + k);
+            __m256 vscale_plus_1 = _mm256_add_ps(vone, vscale);
+            __m256 vres = _mm256_fmadd_ps(vx, vscale_plus_1, vshift);
+            _mm256_storeu_ps(x + k, vres);
+        }
+        for (; k < k1; k++) {
+            x[k] = x[k] * (1.0f + scale[k]) + shift[k];
+        }
+#else
+        for (int64_t k = k0; k < k1; k++) {
+            x[k] = x[k] * (1.0f + scale[k]) + shift[k];
+        }
+#endif
+    }
+}
+
+void fh3_gate_residual(float *h, const float *gate, const float *y, int n, int dim) {
+    if (!h || !gate || !y || n <= 0 || dim <= 0) return;
+
+    int64_t total = (int64_t)n * (int64_t)dim;
+
+    #pragma omp parallel for schedule(static) if (total > 4096)
+    for (int64_t k0 = 0; k0 < total; k0 += 1024) {
+        int64_t k1 = (k0 + 1024 <= total) ? (k0 + 1024) : total;
+#if defined(__AVX2__)
+        int64_t k = k0;
+        for (; k + 8 <= k1; k += 8) {
+            __m256 vh = _mm256_loadu_ps(h + k);
+            __m256 vg = _mm256_loadu_ps(gate + k);
+            __m256 vy = _mm256_loadu_ps(y + k);
+            __m256 vres = _mm256_fmadd_ps(vg, vy, vh);
+            _mm256_storeu_ps(h + k, vres);
+        }
+        for (; k < k1; k++) {
+            h[k] = fmaf(gate[k], y[k], h[k]);
+        }
+#else
+        for (int64_t k = k0; k < k1; k++) {
+            h[k] = fmaf(gate[k], y[k], h[k]);
+        }
+#endif
+    }
+}
+
+#define ATTN_TILE_K 64
+
+void fh3_attention(const float *q, const float *k, const float *v, float *o, int n, int heads, int hd) {
+    if (!q || !k || !v || !o || n <= 0 || heads <= 0 || hd <= 0) return;
+
+    float scale = 1.0f / sqrtf((float)hd);
+    int hd8 = hd - (hd % 8);
+
+    #pragma omp parallel
+    {
+        float *acc = (float *)malloc((size_t)hd * sizeof(float));
+        float scores[ATTN_TILE_K];
+
+        #pragma omp for collapse(2) schedule(static)
+        for (int h = 0; h < heads; h++) {
+            for (int i = 0; i < n; i++) {
+                if (!acc) continue;
+                const float *qi = q + ((size_t)i * (size_t)heads + (size_t)h) * (size_t)hd;
+                float *oi = o + ((size_t)i * (size_t)heads + (size_t)h) * (size_t)hd;
+
+                float m = -1e30f;
+                float l = 0.0f;
+                memset(acc, 0, (size_t)hd * sizeof(float));
+
+                for (int j0 = 0; j0 < n; j0 += ATTN_TILE_K) {
+                    int B = (j0 + ATTN_TILE_K <= n) ? ATTN_TILE_K : (n - j0);
+
+                    /* Compute dot products for key tile */
+                    for (int t = 0; t < B; t++) {
+                        int j = j0 + t;
+                        const float *kj = k + ((size_t)j * (size_t)heads + (size_t)h) * (size_t)hd;
+#if defined(__AVX2__)
+                        scores[t] = dot_product_avx2(qi, kj, hd) * scale;
+#else
+                        scores[t] = dot_product_scalar(qi, kj, hd) * scale;
+#endif
+                    }
+
+                    /* Find tile maximum */
+                    float m_tile = scores[0];
+                    for (int t = 1; t < B; t++) {
+                        if (scores[t] > m_tile) m_tile = scores[t];
+                    }
+
+                    float m_new = (m > m_tile) ? m : m_tile;
+                    float alpha = expf(m - m_new);
+                    l *= alpha;
+
+#if defined(__AVX2__)
+                    __m256 valpha = _mm256_set1_ps(alpha);
+                    for (int d = 0; d < hd8; d += 8) {
+                        __m256 vacc = _mm256_loadu_ps(acc + d);
+                        vacc = _mm256_mul_ps(vacc, valpha);
+                        _mm256_storeu_ps(acc + d, vacc);
+                    }
+                    for (int d = hd8; d < hd; d++) {
+                        acc[d] *= alpha;
+                    }
+#else
+                    for (int d = 0; d < hd; d++) {
+                        acc[d] *= alpha;
+                    }
+#endif
+
+                    for (int t = 0; t < B; t++) {
+                        int j = j0 + t;
+                        const float *vj = v + ((size_t)j * (size_t)heads + (size_t)h) * (size_t)hd;
+                        float p = expf(scores[t] - m_new);
+                        l += p;
+#if defined(__AVX2__)
+                        __m256 vp = _mm256_set1_ps(p);
+                        for (int d = 0; d < hd8; d += 8) {
+                            __m256 vacc = _mm256_loadu_ps(acc + d);
+                            __m256 vv = _mm256_loadu_ps(vj + d);
+                            vacc = _mm256_fmadd_ps(vp, vv, vacc);
+                            _mm256_storeu_ps(acc + d, vacc);
+                        }
+                        for (int d = hd8; d < hd; d++) {
+                            acc[d] = fmaf(p, vj[d], acc[d]);
+                        }
+#else
+                        for (int d = 0; d < hd; d++) {
+                            acc[d] = fmaf(p, vj[d], acc[d]);
+                        }
+#endif
+                    }
+                    m = m_new;
+                }
+
+                float inv_l = (l > 0.0f) ? (1.0f / l) : 0.0f;
+#if defined(__AVX2__)
+                __m256 vinv = _mm256_set1_ps(inv_l);
+                for (int d = 0; d < hd8; d += 8) {
+                    __m256 vacc = _mm256_loadu_ps(acc + d);
+                    _mm256_storeu_ps(oi + d, _mm256_mul_ps(vacc, vinv));
+                }
+                for (int d = hd8; d < hd; d++) {
+                    oi[d] = acc[d] * inv_l;
+                }
+#else
+                for (int d = 0; d < hd; d++) {
+                    oi[d] = acc[d] * inv_l;
+                }
+#endif
+            }
+        }
+        if (acc) free(acc);
+    }
+}
+
+void fh3_timestep_embed(const double *t, int nt, int freq_dim, float *out) {
+    if (!t || !out || nt <= 0 || freq_dim <= 0 || (freq_dim % 2 != 0)) return;
+
+    int half_dim = freq_dim / 2;
+    float *freq = (float *)malloc((size_t)half_dim * sizeof(float));
+    if (!freq) return;
+
+    float log_max_period = logf(10000.0f);
+    for (int k = 0; k < half_dim; k++) {
+        float exponent = -log_max_period * (float)k / (float)half_dim;
+        freq[k] = expf(exponent);
+    }
+
+    #pragma omp parallel for schedule(static) if (nt > 1)
+    for (int i = 0; i < nt; i++) {
+        float t_val = (float)t[i];
+        float *row_out = out + (size_t)i * (size_t)freq_dim;
+        for (int k = 0; k < half_dim; k++) {
+            float arg = t_val * freq[k];
+            row_out[k] = cosf(arg);
+            row_out[half_dim + k] = sinf(arg);
+        }
+    }
+
+    free(freq);
+}
+
+

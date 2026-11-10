@@ -61,6 +61,15 @@ void fh3_matmul(const Fh3W *w, const float *x, float *y, int n_tok, const float 
 void fh3_matmul_scalar(const Fh3W *w, const float *x, float *y, int n_tok, const float *bias_or_null);
 void fh3_matmul_avx2(const Fh3W *w, const float *x, float *y, int n_tok, const float *bias_or_null);
 
+/* Elementwise and attention ops */
+void fh3_rmsnorm(float *x, const float *w, int n, int dim, float eps);
+void fh3_rope3(float *x, const float *cos, const float *sin, int n, int heads, int head_dim, int rot_dim);
+void fh3_swiglu(const float *in, float *out, int n, int F);
+void fh3_modulate(float *x, const float *shift, const float *scale, int n, int dim);
+void fh3_gate_residual(float *h, const float *gate, const float *y, int n, int dim);
+void fh3_attention(const float *q, const float *k, const float *v, float *o, int n, int heads, int hd);
+void fh3_timestep_embed(const double *t, int nt, int freq_dim, float *out);
+
 /* Return / Error codes */
 #define FH3_OK             0
 #define FH3_ERR          (-1)
