@@ -133,6 +133,9 @@ Fh3LayerView fh3_pack_layer(const Fh3Pack *p, int L, const uint8_t *base) {
     const uint8_t *l_base = base;
     if (!l_base) {
         if (p->mapped_base) {
+            if (p->layers[L].file_offset + p->layers[L].size_bytes > p->mapped_size) {
+                return v;
+            }
             l_base = p->mapped_base + p->layers[L].file_offset;
         } else {
             return v;
@@ -207,8 +210,12 @@ uint64_t fh3_schedule_hash(const int *dmd_steps, int n_steps, double video_shift
     if (!dmd_steps || n_steps <= 0) return 0;
 
     size_t buf_size = sizeof(int32_t) + (size_t)n_steps * sizeof(int32_t) + sizeof(double) * 2;
-    uint8_t *buf = (uint8_t *)malloc(buf_size);
-    if (!buf) return 0;
+    uint8_t stack_buf[256];
+    uint8_t *buf = stack_buf;
+    if (buf_size > sizeof(stack_buf)) {
+        buf = (uint8_t *)malloc(buf_size);
+        if (!buf) return 0;
+    }
 
     int32_t n32 = (int32_t)n_steps;
     memcpy(buf, &n32, sizeof(int32_t));
@@ -229,7 +236,9 @@ uint64_t fh3_schedule_hash(const int *dmd_steps, int n_steps, double video_shift
         h *= 0x100000001b3ULL;
     }
 
-    free(buf);
+    if (buf != stack_buf) {
+        free(buf);
+    }
     return h;
 }
 

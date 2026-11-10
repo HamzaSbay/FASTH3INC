@@ -113,14 +113,14 @@ def test_fold_matches_live_synthetic(tmp_path):
     reason="FASTH3_SKIP_REMOTE_TESTS set",
 )
 def test_fold_matches_live_adaln(tmp_path):
-    """Step 1 requirement: For remote block 0, step 3, table[...] == silu(temb(t)) @ W.T + b bit-exact in f32."""
+    """Step 1 requirement: For remote block 0 and 7, step 3, table[...] == silu(temb(t)) @ W.T + b bit-exact in f32."""
     src_url = census.DEFAULT_DIT_URL
+    target_blocks = [0, 7]
 
-    # Fold only layer 0 for fast test turnaround
     out_path = fold_adaln.fold_adaln(
         src=src_url,
         out_dir=tmp_path,
-        layers=[0],
+        layers=target_blocks,
         verbose=True,
     )
 
@@ -133,7 +133,7 @@ def test_fold_matches_live_adaln(tmp_path):
         magic, ver, n_steps, n_blocks, pairs, hidden, shash, t_off, t_bytes, f_off, f_bytes = struct.unpack("<IIIIIIQQQQQ", hdr_data[:64])
         assert magic == fold_adaln.FH3_ADALN_MAGIC
         assert n_steps == 8
-        assert n_blocks == 1
+        assert n_blocks == len(target_blocks)
         assert pairs == 3
         assert hidden == 5376
 
@@ -164,21 +164,32 @@ def test_fold_matches_live_adaln(tmp_path):
     temb_a = fold_adaln._silu(tf_a @ w_tin.T + b_tin) @ w_tout.T + b_tout
     act_a = fold_adaln._silu(temb_a)
 
-    # Live dequantize block 0 adaln weights
-    w_b0 = fold_adaln._dequantize_tensor(fold_adaln._read_tensor_data(src_url, hdr, t_map["blocks.0.adaln_proj.linear.weight"]), t_map["blocks.0.adaln_proj.linear.weight"].type, t_map["blocks.0.adaln_proj.linear.weight"].dims, t_map["blocks.0.adaln_proj.linear.weight"].orig_shape)
-    b_b0 = fold_adaln._dequantize_tensor(fold_adaln._read_tensor_data(src_url, hdr, t_map["blocks.0.adaln_proj.linear.bias"]), t_map["blocks.0.adaln_proj.linear.bias"].type, t_map["blocks.0.adaln_proj.linear.bias"].dims)
-    if w_b0.shape[0] != b_b0.shape[0]: w_b0 = w_b0.T
+    # Verify both block 0 and block 7 at step 3
+    for idx, b_num in enumerate(target_blocks):
+        w_b = fold_adaln._dequantize_tensor(
+            fold_adaln._read_tensor_data(src_url, hdr, t_map[f"blocks.{b_num}.adaln_proj.linear.weight"]),
+            t_map[f"blocks.{b_num}.adaln_proj.linear.weight"].type,
+            t_map[f"blocks.{b_num}.adaln_proj.linear.weight"].dims,
+            t_map[f"blocks.{b_num}.adaln_proj.linear.weight"].orig_shape,
+        )
+        b_b = fold_adaln._dequantize_tensor(
+            fold_adaln._read_tensor_data(src_url, hdr, t_map[f"blocks.{b_num}.adaln_proj.linear.bias"]),
+            t_map[f"blocks.{b_num}.adaln_proj.linear.bias"].type,
+            t_map[f"blocks.{b_num}.adaln_proj.linear.bias"].dims,
+        )
+        if w_b.shape[0] != b_b.shape[0]:
+            w_b = w_b.T
 
-    live_proj_v = (act_v @ w_b0.T + b_b0).reshape(3, 6, hidden)
-    live_proj_a = (act_a @ w_b0.T + b_b0).reshape(3, 6, hidden)
+        live_proj_v = (act_v @ w_b.T + b_b).reshape(3, 6, hidden)
+        live_proj_a = (act_a @ w_b.T + b_b).reshape(3, 6, hidden)
 
-    # Bit-exact assertion on all 6 modulation vectors for each pair
-    # Pair 0 (video)
-    np.testing.assert_array_equal(table[step, 0, 0], live_proj_v[0])
-    # Pair 1 (text)
-    np.testing.assert_array_equal(table[step, 0, 1], live_proj_v[1])
-    # Pair 2 (audio)
-    np.testing.assert_array_equal(table[step, 0, 2], live_proj_a[2])
+        # Bit-exact assertion on all 6 modulation vectors for each pair
+        # Pair 0 (video)
+        np.testing.assert_array_equal(table[step, idx, 0], live_proj_v[0])
+        # Pair 1 (text)
+        np.testing.assert_array_equal(table[step, idx, 1], live_proj_v[1])
+        # Pair 2 (audio)
+        np.testing.assert_array_equal(table[step, idx, 2], live_proj_a[2])
 
 
 def test_pack_dit_synthetic(tmp_path):
