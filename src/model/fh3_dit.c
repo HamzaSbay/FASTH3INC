@@ -107,6 +107,10 @@ int fh3_dit_open(const char *globals_path, const char *adaln_path, const Fh3DitC
     m->condition_proj_bias = load_tensor_f32(m, "condition_proj.bias");
 
     /* 4. Token refiner blocks */
+    if (m->cfg.num_refiner_layers < 0 || m->cfg.num_refiner_layers > 4) {
+        fh3_dit_close(m);
+        return FH3_E_INVALID;
+    }
     for (int r = 0; r < m->cfg.num_refiner_layers; r++) {
         char name[128];
         snprintf(name, sizeof(name), "token_refiner.blocks.%d.norm1.weight", r);
@@ -286,6 +290,9 @@ int fh3_dit_forward(
 ) {
     if (!m || !tr || !seq || !x_video || !x_audio || !text_rows || !v_video || !v_audio) {
         return FH3_ERR;
+    }
+    if (step < 0 || step >= m->adaln.n_steps) {
+        return FH3_E_INVALID;
     }
 
     int N = seq->seq_len;

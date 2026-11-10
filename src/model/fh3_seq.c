@@ -70,6 +70,7 @@ int fh3_seq_build(const Fh3SeqSpec *s, Fh3Seq *out) {
                                : 1.0;
         int pw = (s->patch_w > 0) ? s->patch_w : 2;
         int nw = (s->latent_width > 0) ? (s->latent_width / pw) : 1;
+        if (nw <= 0) nw = 1;
         double ratio_w = (s->latent_width > 0) ? ((double)s->latent_width / sqrt_area) : 1.0;
         double left_w = (1.0 - ratio_w) / 2.0;
         double w0 = left_w * 32.0;
@@ -90,6 +91,7 @@ int fh3_seq_build(const Fh3SeqSpec *s, Fh3Seq *out) {
         /* 3. Video rows: temporal + spatial grid */
         int ph = (s->patch_h > 0) ? s->patch_h : 2;
         int nh = (s->latent_height > 0) ? (s->latent_height / ph) : 1;
+        if (nh <= 0) nh = 1;
         int rpf = nh * nw;
         double ratio_h = (s->latent_height > 0) ? ((double)s->latent_height / sqrt_area) : 1.0;
         double left_h = (1.0 - ratio_h) / 2.0;
