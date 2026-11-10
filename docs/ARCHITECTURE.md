@@ -207,7 +207,8 @@ FastH3 carries learned gate weights `blocks.*.attn.to_gate_compress.weight` ($[5
   $$A_{\text{coarse}}[h, i, :] = \text{softmax}(S[h, i, :], \text{dim}=-1)$$
   $$O_{\text{coarse}}[h, i, :] = \sum_j A_{\text{coarse}}[h, i, j] V_{\text{pool}}[h, j, :]$$
 - Gating:
-  $$\text{gate} = x \cdot W_{\text{gate\_compress}}^T \in \mathbb{R}^{N \times H \times d_{\text{head}}}$$
+  $$\text{gate} = \tilde{x}_{\text{msa}} \cdot W_{\text{gate\_compress}}^T \in \mathbb{R}^{N \times H \times d_{\text{head}}}$$
+  *(Note: operates on the modulated normalized input $\tilde{x}_{\text{msa}}$, the same state fed to $W_{\text{qkv}}$, not the unmodulated residual $x$.)*
 - Additive combination:
   $$O[q, h, :] = O_{\text{fine}}[q, h, :] + O_{\text{coarse}}[\text{tile}(q), h, :] \odot \text{gate}[q, h, :]$$
 
