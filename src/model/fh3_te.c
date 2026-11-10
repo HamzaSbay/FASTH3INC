@@ -164,7 +164,8 @@ struct Fh3Te {
 int fh3_te_open(const char *trunk_path, const char *embed_path, const Fh3TeCfg *cfg, Fh3Te **out) {
     if (!embed_path || !cfg || !out) return FH3_ERR;
     if (cfg->hidden_size <= 0 || cfg->num_heads <= 0 || cfg->num_kv_heads <= 0 ||
-        cfg->head_dim <= 0 || cfg->num_layers <= 0) {
+        cfg->head_dim <= 0 || cfg->num_layers <= 0 ||
+        (cfg->num_heads % cfg->num_kv_heads != 0)) {
         return FH3_E_INVALID;
     }
 
@@ -210,9 +211,11 @@ int fh3_te_open(const char *trunk_path, const char *embed_path, const Fh3TeCfg *
     /* 2. Open trunk pack if trunk_path is provided */
     if (trunk_path && strlen(trunk_path) > 0) {
         rc = fh3_pack_open(trunk_path, &m->trunk_pack);
-        if (rc == FH3_OK) {
-            m->has_trunk_pack = true;
+        if (rc != FH3_OK) {
+            fh3_te_close(m);
+            return rc;
         }
+        m->has_trunk_pack = true;
     }
 
     *out = m;
