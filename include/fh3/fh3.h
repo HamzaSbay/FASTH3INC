@@ -96,6 +96,35 @@ int fh3_adaln_open(const char *path, uint64_t expect_hash, Fh3Adaln *a);
 void fh3_adaln_close(Fh3Adaln *a);
 const float *fh3_adaln_row(const Fh3Adaln *a, int step, int block, int pair, int chunk);
 
+/* Trunk streamer operations */
+typedef struct Fh3TrunkStats {
+    uint64_t hits;
+    uint64_t misses;
+    uint64_t bytes_read;
+    double read_s;
+    double wait_s;
+} Fh3TrunkStats;
+
+int fh3_trunk_open(const char *path, uint64_t budget_bytes, Fh3Trunk *t);
+void fh3_trunk_close(Fh3Trunk *t);
+void fh3_trunk_prefetch(Fh3Trunk *t, int L);
+const uint8_t *fh3_trunk_acquire(Fh3Trunk *t, int L);
+Fh3TrunkStats fh3_trunk_stats(const Fh3Trunk *t);
+
+/* Execution plan & memory check */
+typedef struct Fh3Plan {
+    uint64_t budget_bytes;
+    uint64_t min_bytes;
+    uint64_t pinned_bytes;
+    uint64_t ring_bytes;
+    uint64_t activation_bytes;
+    uint64_t table_bytes;
+    uint64_t total_bytes;
+} Fh3Plan;
+
+uint64_t fh3_plan_bytes(const Fh3Plan *p);
+int fh3_plan_check(const Fh3Plan *p);
+
 /* Return / Error codes */
 #define FH3_OK             0
 #define FH3_ERR          (-1)
