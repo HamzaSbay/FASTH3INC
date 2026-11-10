@@ -15,7 +15,24 @@ typedef struct Fh3Dit Fh3Dit;
 typedef struct Fh3TeCfg Fh3TeCfg;
 typedef struct Fh3Seq Fh3Seq;
 typedef struct Fh3SeqSpec Fh3SeqSpec;
-typedef struct Fh3Sched Fh3Sched;
+
+typedef struct Fh3SchedStep {
+    float sigma_v;
+    float sigma_v_next;
+    float sigma_a;
+    float sigma_a_next;
+    float t_v;
+    float t_a;
+} Fh3SchedStep;
+
+typedef struct Fh3Sched {
+    int n_steps;               /* 8 */
+    double video_shift;        /* 10.0 */
+    double audio_shift;        /* 3.0 */
+    float video_sigmas[9];     /* 8 steps + terminal 0.0f */
+    float audio_sigmas[9];     /* 8 steps + terminal 0.0f */
+    Fh3SchedStep steps[8];
+} Fh3Sched;
 typedef enum {
     FH3_ATTN_DENSE = 0,
     FH3_ATTN_VSA   = 1,
@@ -135,6 +152,12 @@ int fh3_dit_prepare_text(const Fh3Dit *m, const float *text_emb, int T, float *t
 int fh3_dit_forward(const Fh3Dit *m, Fh3Trunk *tr, const Fh3Seq *seq, int step,
                     const float *x_video, const float *x_audio, const float *text_rows,
                     float *v_video, float *v_audio);
+
+/* Sampler scheduler & noise operations */
+int fh3_sched_build(Fh3Sched *s, const int dmd[8], double video_shift, double audio_shift);
+void fh3_sched_step(const Fh3Sched *s, int i, float *x, const float *v, int n, int modality, const float *noise_next);
+void fh3_rng_normal(uint64_t seed, uint64_t stream, float *out, size_t n);
+int fh3_load_noise(const char *path, float *out, size_t n);
 
 /* Execution plan & memory check */
 typedef struct Fh3Plan {
