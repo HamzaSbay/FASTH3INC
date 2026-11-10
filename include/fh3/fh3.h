@@ -165,6 +165,13 @@ void fh3_tok_free(Fh3Tok *t);
 int fh3_tok_encode(const Fh3Tok *t, const char *utf8, int **ids, int *n);
 int fh3_tok_encode_opt(const Fh3Tok *t, const char *utf8, int normalize_newlines, int **ids, int *n);
 
+/* Text encoder operations */
+int fh3_te_open(const char *trunk_path, const char *embed_path, const Fh3TeCfg *cfg, Fh3Te **out);
+void fh3_te_close(Fh3Te *m);
+int fh3_te_encode(const Fh3Te *m, Fh3Trunk *tr, const int *ids, int T, float *out);
+int fh3_te_cache_lookup(const char *cache_dir, const int *ids, int T, float *out);
+int fh3_te_cache_save(const char *cache_dir, const int *ids, int T, const float *emb);
+
 /* Execution plan & memory check */
 typedef struct Fh3Plan {
     uint64_t budget_bytes;

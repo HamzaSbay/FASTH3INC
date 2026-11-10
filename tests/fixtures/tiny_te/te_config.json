@@ -1,0 +1,21 @@
+{
+  "hidden_size": 128,
+  "num_heads": 4,
+  "num_kv_heads": 2,
+  "head_dim": 32,
+  "num_layers": 3,
+  "total_model_layers": 4,
+  "intermediate_size": 256,
+  "vocab_size": 1000,
+  "norm_eps": 1e-06,
+  "qk_norm_eps": 1e-06,
+  "rope_theta": 5000000.0,
+  "num_tokens": 5,
+  "prompt_ids": [
+    42,
+    108,
+    256,
+    789,
+    15
+  ]
+}

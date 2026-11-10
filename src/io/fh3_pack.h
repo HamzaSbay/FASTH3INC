@@ -15,6 +15,7 @@ extern "C" {
 #define FH3_PACK_VERSION 1U
 #define FH3_PACK_ALIGNMENT 4096U
 #define FH3_PACK_TENSORS_PER_LAYER 9U
+#define FH3_PACK_MAX_TENSORS_PER_LAYER 16U
 
 #define FH3_ADALN_MAGIC 0x41334846U  /* 'FH3A' */
 #define FH3_ADALN_VERSION 1U
@@ -54,7 +55,7 @@ typedef struct Fh3PackLayerDesc {
     uint64_t size_bytes;      /* 4096-aligned run size */
     uint32_t n_tensors;       /* 9 */
     uint32_t reserved;
-    Fh3PackTensorDesc tensors[FH3_PACK_TENSORS_PER_LAYER];
+    Fh3PackTensorDesc tensors[FH3_PACK_MAX_TENSORS_PER_LAYER];
 } Fh3PackLayerDesc;
 
 typedef struct Fh3PackHeader {

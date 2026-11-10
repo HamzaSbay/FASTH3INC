@@ -53,23 +53,38 @@ int fh3_pack_open(const char *path, Fh3Pack *p) {
         return FH3_E_INVALID;
     }
 
-    uint64_t needed_index = (uint64_t)p->header.num_layers * sizeof(Fh3PackLayerDesc);
-    if (p->header.index_bytes < needed_index ||
-        p->header.index_offset + needed_index > p->file.size) {
+    uint32_t n_layers = p->header.num_layers;
+    uint64_t disk_desc_bytes = (n_layers > 0) ? (p->header.index_bytes / n_layers) : 0;
+    if (disk_desc_bytes < 24 || p->header.index_offset + p->header.index_bytes > p->file.size) {
         fh3_pack_close(p);
         return FH3_E_TRUNCATED;
     }
 
-    p->layers = (Fh3PackLayerDesc *)malloc((size_t)needed_index);
+    p->layers = (Fh3PackLayerDesc *)calloc((size_t)n_layers, sizeof(Fh3PackLayerDesc));
     if (!p->layers) {
         fh3_pack_close(p);
         return FH3_E_NOMEM;
     }
 
-    rd = fh3_pread(&p->file, p->layers, (size_t)needed_index, p->header.index_offset);
-    if (rd != (int64_t)needed_index) {
-        fh3_pack_close(p);
-        return FH3_E_IO;
+    for (uint32_t L = 0; L < n_layers; L++) {
+        uint8_t desc_buf[24 + FH3_PACK_MAX_TENSORS_PER_LAYER * sizeof(Fh3PackTensorDesc)];
+        size_t to_read = (disk_desc_bytes < sizeof(desc_buf)) ? (size_t)disk_desc_bytes : sizeof(desc_buf);
+        rd = fh3_pread(&p->file, desc_buf, to_read, p->header.index_offset + (uint64_t)L * disk_desc_bytes);
+        if (rd != (int64_t)to_read) {
+            fh3_pack_close(p);
+            return FH3_E_IO;
+        }
+        memcpy(&p->layers[L].file_offset, desc_buf, 8);
+        memcpy(&p->layers[L].size_bytes, desc_buf + 8, 8);
+        memcpy(&p->layers[L].n_tensors, desc_buf + 16, 4);
+        memcpy(&p->layers[L].reserved, desc_buf + 20, 4);
+        uint32_t nt = p->layers[L].n_tensors;
+        if (nt > FH3_PACK_MAX_TENSORS_PER_LAYER) nt = FH3_PACK_MAX_TENSORS_PER_LAYER;
+        size_t t_avail = (to_read > 24) ? ((to_read - 24) / sizeof(Fh3PackTensorDesc)) : 0;
+        if (nt > t_avail) nt = (uint32_t)t_avail;
+        if (nt > 0) {
+            memcpy(p->layers[L].tensors, desc_buf + 24, (size_t)nt * sizeof(Fh3PackTensorDesc));
+        }
     }
 
     p->num_layers = (int)p->header.num_layers;
