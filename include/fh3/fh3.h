@@ -172,6 +172,15 @@ int fh3_te_encode(const Fh3Te *m, Fh3Trunk *tr, const int *ids, int T, float *ou
 int fh3_te_cache_lookup(const char *cache_dir, const int *ids, int T, float *out);
 int fh3_te_cache_save(const char *cache_dir, const int *ids, int T, const float *emb);
 
+/* Audio VAE (BigVGAN) decoder operations */
+int fh3_vae_audio_open(const char *path, Fh3VaeA **out);
+void fh3_vae_audio_close(Fh3VaeA *m);
+int fh3_vae_audio_decode(const Fh3VaeA *m, const float *lat /*2 ch × L × 32*/, int L, float *pcm /*2 × L*800*/);
+int fh3_vae_audio_upsample_ratio(const Fh3VaeA *m);
+
+/* WAV audio writer */
+int fh3_wav_write(const char *path, const float *pcm /*ch × n*/, int ch, int64_t n, int rate /*32000*/);
+
 /* Execution plan & memory check */
 typedef struct Fh3Plan {
     uint64_t budget_bytes;

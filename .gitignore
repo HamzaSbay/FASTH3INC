@@ -20,10 +20,10 @@ __pycache__/
 .pytest_cache/
 
 # Model files, packed files, outputs (NEVER commit weights)
-models/
-packed/
-out/
-scratch/
+/models/
+/packed/
+/out/
+/scratch/
 *.gguf
 *.bin
 *.safetensors

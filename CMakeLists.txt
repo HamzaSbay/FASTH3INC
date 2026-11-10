@@ -22,7 +22,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     )
 endif()
 
-# Core static library from src/**
+# Core static library from src/** (core, io, model, tokenizer, vae, out)
 file(GLOB_RECURSE FH3_CORE_SRCS CONFIGURE_DEPENDS "src/*.c")
 list(FILTER FH3_CORE_SRCS EXCLUDE REGEX "src/cli/.*")
 
