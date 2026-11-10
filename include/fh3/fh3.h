@@ -26,6 +26,17 @@ typedef struct Fh3VaeA Fh3VaeA;
 typedef struct Fh3VaeV Fh3VaeV;
 typedef struct Fh3FrameSink Fh3FrameSink;
 
+/* Return / Error codes */
+#define FH3_OK             0
+#define FH3_ERR          (-1)
+#define FH3_E_IO         (-2)
+#define FH3_E_TRUNCATED  (-3)
+#define FH3_E_BAD_MAGIC  (-4)
+#define FH3_E_BAD_VERSION (-5)
+#define FH3_E_NOT_FOUND  (-6)
+#define FH3_E_NOMEM      (-7)
+#define FH3_E_INVALID    (-8)
+
 /* Version info */
 #define FH3_VERSION_MAJOR 0
 #define FH3_VERSION_MINOR 1

@@ -22,6 +22,7 @@ __pycache__/
 models/
 packed/
 out/
+scratch/
 *.gguf
 *.bin
 *.safetensors
@@ -30,6 +31,9 @@ out/
 *.y4m
 *.wav
 *.mp4
+
+# Allow test fixtures
+!tests/fixtures/**
 
 # Editor / IDE settings
 .vscode/
