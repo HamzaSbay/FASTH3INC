@@ -586,6 +586,11 @@ int fh3_gguf_open(const char *path, Fh3Gguf *g) {
                 fh3_gguf_close(g);
                 return rc;
             }
+            if (n_dims > 4) {
+                reader_free(&r);
+                fh3_gguf_close(g);
+                return FH3_E_INVALID;
+            }
             g->tensors[i].ndim = (int)n_dims;
 
             for (uint32_t d = 0; d < n_dims; d++) {
@@ -650,8 +655,12 @@ int fh3_gguf_open(const char *path, Fh3Gguf *g) {
 
     /* Validate data_off + max(off + nbytes) <= file_size up front */
     for (uint64_t i = 0; i < g->tensor_count; i++) {
+        if (g->tensors[i].off > g->file.size || g->tensors[i].nbytes > g->file.size) {
+            fh3_gguf_close(g);
+            return FH3_E_TRUNCATED;
+        }
         uint64_t tensor_end = g->data_offset + g->tensors[i].off + g->tensors[i].nbytes;
-        if (tensor_end > g->file.size) {
+        if (tensor_end < g->data_offset || tensor_end > g->file.size) {
             fh3_gguf_close(g);
             return FH3_E_TRUNCATED;
         }
