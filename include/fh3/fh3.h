@@ -159,6 +159,12 @@ void fh3_sched_step(const Fh3Sched *s, int i, float *x, const float *v, int n, i
 void fh3_rng_normal(uint64_t seed, uint64_t stream, float *out, size_t n);
 int fh3_load_noise(const char *path, float *out, size_t n);
 
+/* Tokenizer operations */
+int fh3_tok_load(const char *vocab_json, const char *merges_txt, Fh3Tok *t);
+void fh3_tok_free(Fh3Tok *t);
+int fh3_tok_encode(const Fh3Tok *t, const char *utf8, int **ids, int *n);
+int fh3_tok_encode_opt(const Fh3Tok *t, const char *utf8, int normalize_newlines, int **ids, int *n);
+
 /* Execution plan & memory check */
 typedef struct Fh3Plan {
     uint64_t budget_bytes;
