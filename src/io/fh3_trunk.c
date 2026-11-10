@@ -46,7 +46,7 @@ static DWORD WINAPI fh3_trunk_worker_win32(LPVOID param) {
         int64_t rd = fh3_pread(&t->direct_file, dst, sz, off);
         double t1 = fh3_trunk_time_sec();
 
-        t->worker_read_bytes = (rd > 0) ? rd : 0;
+        t->worker_read_bytes = rd;
         t->prefetch_io_time = t1 - t0;
 
         SetEvent(t->done_event);
@@ -75,7 +75,7 @@ static void *fh3_trunk_worker_posix(void *param) {
         double t1 = fh3_trunk_time_sec();
 
         pthread_mutex_lock(&t->mutex);
-        t->worker_read_bytes = (rd > 0) ? rd : 0;
+        t->worker_read_bytes = rd;
         t->prefetch_io_time = t1 - t0;
         t->worker_has_work = false;
         t->worker_done = true;
@@ -92,9 +92,10 @@ static void *fh3_trunk_worker_posix(void *param) {
 
 uint64_t fh3_plan_bytes(const Fh3Plan *p) {
     if (!p) return 0;
+    uint64_t comp_sum = p->pinned_bytes + p->ring_bytes + p->activation_bytes + p->table_bytes;
+    if (comp_sum > 0) return comp_sum;
     if (p->total_bytes > 0) return p->total_bytes;
-    if (p->budget_bytes > 0) return p->budget_bytes;
-    return p->pinned_bytes + p->ring_bytes + p->activation_bytes + p->table_bytes;
+    return p->budget_bytes;
 }
 
 int fh3_plan_check(const Fh3Plan *p) {
@@ -254,6 +255,11 @@ int fh3_trunk_open(const char *path, uint64_t budget_bytes, Fh3Trunk *t) {
     }
 #endif
 
+    if (!t->thread_created) {
+        fh3_trunk_close(t);
+        return FH3_ERR;
+    }
+
     return FH3_OK;
 }
 
@@ -280,20 +286,31 @@ void fh3_trunk_close(Fh3Trunk *t) {
         SetEvent(t->start_event);
         WaitForSingleObject(t->thread, INFINITE);
         CloseHandle(t->thread);
-        CloseHandle(t->start_event);
-        CloseHandle(t->done_event);
-        DeleteCriticalSection(&t->cs);
+        t->thread = NULL;
 #else
         pthread_mutex_lock(&t->mutex);
         pthread_cond_signal(&t->start_cond);
         pthread_mutex_unlock(&t->mutex);
         pthread_join(t->thread, NULL);
-        pthread_mutex_destroy(&t->mutex);
-        pthread_cond_destroy(&t->start_cond);
-        pthread_cond_destroy(&t->done_cond);
 #endif
         t->thread_created = false;
     }
+
+#if defined(_WIN32)
+    if (t->start_event != NULL && t->start_event != INVALID_HANDLE_VALUE) {
+        CloseHandle(t->start_event);
+        t->start_event = NULL;
+    }
+    if (t->done_event != NULL && t->done_event != INVALID_HANDLE_VALUE) {
+        CloseHandle(t->done_event);
+        t->done_event = NULL;
+    }
+    DeleteCriticalSection(&t->cs);
+#else
+    pthread_mutex_destroy(&t->mutex);
+    pthread_cond_destroy(&t->start_cond);
+    pthread_cond_destroy(&t->done_cond);
+#endif
 
     /* Free pinned layers */
     if (t->pinned_layers) {
@@ -353,12 +370,20 @@ void fh3_trunk_prefetch(Fh3Trunk *t, int L) {
         }
         pthread_mutex_unlock(&t->mutex);
 #endif
-        t->ring_layer[t->prefetch_slot] = t->prefetch_layer;
+        size_t prev_sz = (size_t)t->pack.layers[t->prefetch_layer].size_bytes;
+        if (t->worker_read_bytes == (int64_t)prev_sz) {
+            t->ring_layer[t->prefetch_slot] = t->prefetch_layer;
+        } else {
+            t->ring_layer[t->prefetch_slot] = -1;
+        }
         t->prefetch_in_flight = false;
     }
 
     /* Choose idle slot */
     int idle_slot = (t->active_slot == 0) ? 1 : 0;
+
+    /* Invalidate idle slot since it is about to be overwritten */
+    t->ring_layer[idle_slot] = -1;
 
     /* Start prefetch into idle_slot */
     t->prefetch_layer = L;
@@ -391,11 +416,21 @@ const uint8_t *fh3_trunk_acquire(Fh3Trunk *t, int L) {
     }
 
     /* 2. Streaming layer */
-    /* Check if already resident in active slot */
-    if (t->active_slot >= 0 && t->ring_layer[t->active_slot] == L && !t->prefetch_in_flight) {
+    /* Check if already resident in active slot (double-buffering safe: no prefetch_in_flight check) */
+    if (t->active_slot >= 0 && t->ring_layer[t->active_slot] == L) {
         t->stats.hits++;
         return t->ring_buf[t->active_slot];
     }
+
+    /* Check if resident in other ring slot */
+    int other_slot = (t->active_slot == 0) ? 1 : 0;
+    if (t->ring_layer[other_slot] == L) {
+        t->active_slot = other_slot;
+        t->stats.hits++;
+        return t->ring_buf[other_slot];
+    }
+
+    size_t sz = (size_t)t->pack.layers[L].size_bytes;
 
     /* If this layer is currently in flight */
     if (t->prefetch_in_flight && t->prefetch_layer == L) {
@@ -413,11 +448,18 @@ const uint8_t *fh3_trunk_acquire(Fh3Trunk *t, int L) {
         double wait_dur = w1 - w0;
 
         t->prefetch_in_flight = false;
+
+        /* Verify I/O completion */
+        if (t->worker_read_bytes != (int64_t)sz) {
+            t->ring_layer[t->prefetch_slot] = -1;
+            return NULL;
+        }
+
         t->ring_layer[t->prefetch_slot] = L;
         t->active_slot = t->prefetch_slot;
 
         t->stats.misses++;
-        t->stats.bytes_read += t->pack.layers[L].size_bytes;
+        t->stats.bytes_read += sz;
         t->stats.read_s += t->prefetch_io_time;
         t->stats.wait_s += wait_dur;
 
@@ -440,11 +482,18 @@ const uint8_t *fh3_trunk_acquire(Fh3Trunk *t, int L) {
     double wait_dur = w1 - w0;
 
     t->prefetch_in_flight = false;
+
+    /* Verify I/O completion */
+    if (t->worker_read_bytes != (int64_t)sz) {
+        t->ring_layer[t->prefetch_slot] = -1;
+        return NULL;
+    }
+
     t->ring_layer[t->prefetch_slot] = L;
     t->active_slot = t->prefetch_slot;
 
     t->stats.misses++;
-    t->stats.bytes_read += t->pack.layers[L].size_bytes;
+    t->stats.bytes_read += sz;
     t->stats.read_s += t->prefetch_io_time;
     t->stats.wait_s += wait_dur;
 

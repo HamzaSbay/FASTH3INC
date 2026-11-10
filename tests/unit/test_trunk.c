@@ -273,14 +273,95 @@ static int test_trunk_prefetch_overlaps(const char *pack_path) {
 }
 
 /* -------------------------------------------------------------------------
- * Test 4: Plan refuses when short
+ * Test 4: Multi-slot acquisition & double-buffering concurrency
+ * Verifies:
+ * - Acquire A, prefetch B, re-acquire A during in-flight prefetch (no stall/re-read)
+ * - Acquire B
+ * - Oscillation between resident layers A and B without deadlock or reload
+ * ------------------------------------------------------------------------- */
+
+static int test_trunk_multi_slot_acquisition(const char *pack_path) {
+    printf("--- Running test_trunk_multi_slot_acquisition ---\n");
+
+    uint64_t budget = 8ULL * TEST_LAYER_SIZE;
+    Fh3Trunk tr;
+    int rc = fh3_trunk_open(pack_path, budget, &tr);
+    TEST_ASSERT(rc == FH3_OK);
+
+    /* Layers 6 and 7 are streaming layers */
+    int layerA = 6;
+    int layerB = 7;
+
+    /* 1. Acquire layer A */
+    const uint8_t *pA1 = fh3_trunk_acquire(&tr, layerA);
+    TEST_ASSERT(pA1 != NULL);
+    TEST_ASSERT(pA1[0] == (uint8_t)(0xA0 + layerA));
+
+    Fh3TrunkStats s1 = fh3_trunk_stats(&tr);
+    TEST_ASSERT(s1.misses == 1);
+    TEST_ASSERT(s1.hits == 0);
+
+    /* 2. Prefetch layer B into the idle slot */
+    fh3_trunk_prefetch(&tr, layerB);
+
+    /* 3. Re-acquire layer A while prefetch of B is in flight (double-buffering hit) */
+    const uint8_t *pA2 = fh3_trunk_acquire(&tr, layerA);
+    TEST_ASSERT(pA2 == pA1);
+
+    Fh3TrunkStats s2 = fh3_trunk_stats(&tr);
+    TEST_ASSERT(s2.misses == 1);
+    TEST_ASSERT(s2.hits == 1); /* Hit on active slot without stall or re-read */
+
+    /* 4. Acquire layer B */
+    const uint8_t *pB1 = fh3_trunk_acquire(&tr, layerB);
+    TEST_ASSERT(pB1 != NULL);
+    TEST_ASSERT(pB1 != pA1);
+    TEST_ASSERT(pB1[0] == (uint8_t)(0xA0 + layerB));
+
+    Fh3TrunkStats s3 = fh3_trunk_stats(&tr);
+    TEST_ASSERT(s3.misses == 2);
+    TEST_ASSERT(s3.hits == 1);
+
+    /* 5. Both ring slots are resident (slot 0 has layer A, slot 1 has layer B).
+     * Oscillate between layer A and B without prefetching: neither should deadlock or reload! */
+    const uint8_t *pA3 = fh3_trunk_acquire(&tr, layerA);
+    TEST_ASSERT(pA3 == pA1);
+    Fh3TrunkStats s4 = fh3_trunk_stats(&tr);
+    TEST_ASSERT(s4.hits == 2);
+    TEST_ASSERT(s4.misses == 2);
+
+    const uint8_t *pB2 = fh3_trunk_acquire(&tr, layerB);
+    TEST_ASSERT(pB2 == pB1);
+    Fh3TrunkStats s5 = fh3_trunk_stats(&tr);
+    TEST_ASSERT(s5.hits == 3);
+    TEST_ASSERT(s5.misses == 2);
+
+    const uint8_t *pA4 = fh3_trunk_acquire(&tr, layerA);
+    TEST_ASSERT(pA4 == pA1);
+    Fh3TrunkStats s6 = fh3_trunk_stats(&tr);
+    TEST_ASSERT(s6.hits == 4);
+    TEST_ASSERT(s6.misses == 2);
+
+    const uint8_t *pB3 = fh3_trunk_acquire(&tr, layerB);
+    TEST_ASSERT(pB3 == pB1);
+    Fh3TrunkStats s7 = fh3_trunk_stats(&tr);
+    TEST_ASSERT(s7.hits == 5);
+    TEST_ASSERT(s7.misses == 2);
+
+    fh3_trunk_close(&tr);
+    printf("[PASS] test_trunk_multi_slot_acquisition\n");
+    return 0;
+}
+
+/* -------------------------------------------------------------------------
+ * Test 5: Plan refuses when short & plan precedence
  * Verify FH3_E_NOMEM when requested exceeds available RAM or below minimum.
  * ------------------------------------------------------------------------- */
 
 static int test_plan_refuses_when_short(void) {
     printf("--- Running test_plan_refuses_when_short ---\n");
 
-    /* Sub-test 4A: requested exceeds 95% of available RAM */
+    /* Sub-test 5A: requested exceeds 95% of available RAM */
     uint64_t avail = fh3_mem_available();
     TEST_ASSERT(avail > 0);
 
@@ -291,7 +372,7 @@ static int test_plan_refuses_when_short(void) {
     int rc = fh3_plan_check(&p_huge);
     TEST_ASSERT(rc == FH3_E_NOMEM);
 
-    /* Sub-test 4B: budget below minimum required memory (e.g. --mem-gb 0.5) */
+    /* Sub-test 5B: budget below minimum required memory (e.g. --mem-gb 0.5) */
     Fh3Plan p_short;
     memset(&p_short, 0, sizeof(p_short));
     p_short.min_bytes = 2ULL * 1024 * 1024 * 1024; /* Minimum 2 GB needed */
@@ -299,7 +380,7 @@ static int test_plan_refuses_when_short(void) {
     rc = fh3_plan_check(&p_short);
     TEST_ASSERT(rc == FH3_E_NOMEM);
 
-    /* Sub-test 4C: valid plan within limits passes */
+    /* Sub-test 5C: valid plan within limits passes */
     Fh3Plan p_valid;
     memset(&p_valid, 0, sizeof(p_valid));
     p_valid.min_bytes = 1024 * 1024;
@@ -307,6 +388,17 @@ static int test_plan_refuses_when_short(void) {
     rc = fh3_plan_check(&p_valid);
     TEST_ASSERT(rc == FH3_OK);
     TEST_ASSERT(fh3_plan_bytes(&p_valid) == 32 * 1024 * 1024);
+
+    /* Sub-test 5D: component sum precedence in fh3_plan_bytes */
+    Fh3Plan p_comp;
+    memset(&p_comp, 0, sizeof(p_comp));
+    p_comp.pinned_bytes = 1000;
+    p_comp.ring_bytes = 2000;
+    p_comp.activation_bytes = 3000;
+    p_comp.table_bytes = 4000;
+    p_comp.total_bytes = 50000;
+    p_comp.budget_bytes = 99999;
+    TEST_ASSERT(fh3_plan_bytes(&p_comp) == 10000);
 
     printf("[PASS] test_plan_refuses_when_short\n");
     return 0;
@@ -328,6 +420,7 @@ int main(void) {
     if (test_trunk_pinned_prefix_hit_rate(synth_pack) != 0) g_failures++;
     if (test_trunk_never_lru(synth_pack) != 0) g_failures++;
     if (test_trunk_prefetch_overlaps(synth_pack) != 0) g_failures++;
+    if (test_trunk_multi_slot_acquisition(synth_pack) != 0) g_failures++;
     if (test_plan_refuses_when_short() != 0) g_failures++;
 
     remove(synth_pack);
