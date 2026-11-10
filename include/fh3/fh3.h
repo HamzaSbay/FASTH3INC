@@ -50,7 +50,12 @@ typedef struct Fh3Tok Fh3Tok;
 typedef struct Fh3Te Fh3Te;
 typedef struct Fh3VaeA Fh3VaeA;
 typedef struct Fh3VaeV Fh3VaeV;
-typedef struct Fh3FrameSink Fh3FrameSink;
+
+typedef struct Fh3FrameSink {
+    void *user;
+    int (*write_frame)(void *user, int frame_idx, const float *rgb /*3 x H x W planar in [0, 1]*/, int width, int height);
+} Fh3FrameSink;
+
 typedef struct Fh3Pack Fh3Pack;
 typedef struct Fh3Adaln Fh3Adaln;
 
@@ -180,6 +185,20 @@ int fh3_vae_audio_upsample_ratio(const Fh3VaeA *m);
 
 /* WAV audio writer */
 int fh3_wav_write(const char *path, const float *pcm /*ch × n*/, int ch, int64_t n, int rate /*32000*/);
+
+/* Video VAE (ViT) decoder operations */
+int fh3_vae_video_open(const char *path, Fh3VaeV **out);
+void fh3_vae_video_close(Fh3VaeV *m);
+int fh3_vae_video_decode(const Fh3VaeV *m, const float *lat /*24 × F × h × w*/, int F, int h, int w, Fh3FrameSink *sink);
+int fh3_vae_video_patch_size(const Fh3VaeV *m);
+int fh3_vae_video_patch_size_t(const Fh3VaeV *m);
+
+/* Y4M video writer */
+typedef struct Fh3Y4m Fh3Y4m;
+int fh3_y4m_open(const char *path, int width, int height, int fps_num, int fps_den, Fh3Y4m **out);
+int fh3_y4m_write_rgb(Fh3Y4m *y, const float *rgb /*3 × H × W in [0, 1]*/);
+void fh3_y4m_close(Fh3Y4m *y);
+Fh3FrameSink fh3_y4m_frame_sink(Fh3Y4m *y);
 
 /* Execution plan & memory check */
 typedef struct Fh3Plan {

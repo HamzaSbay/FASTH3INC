@@ -420,13 +420,30 @@ def main() -> None:
     parser.add_argument("--src", default=DEFAULT_AUDIO_VAE_URL, help="Source safetensors file or URL")
     parser.add_argument("--out", default="packed/vae_audio_dec.bin", help="Output packed binary path")
     parser.add_argument("--config", default=None, help="Optional config.json URL or path")
+    parser.add_argument("--video", action="store_true", help="Pack video VAE instead of audio VAE")
     parser.add_argument("--tiny", action="store_true", help="Generate tiny diffusers fixture in tests/fixtures/tiny_vae_audio")
-    parser.add_argument("--tiny-dir", default="tests/fixtures/tiny_vae_audio", help="Output directory for tiny fixture")
+    parser.add_argument("--tiny-dir", default=None, help="Output directory for tiny fixture")
     args = parser.parse_args()
 
+    if args.video:
+        try:
+            from . import pack_video_vae
+        except ImportError:
+            import pack_video_vae
+        if args.tiny:
+            td = args.tiny_dir or "tests/fixtures/tiny_vae_video"
+            print(f"Generating tiny diffusers video VAE fixture in {td}...")
+            meta = pack_video_vae.make_tiny_vae_video(td)
+            print(f"Tiny fixture generated successfully: {meta}")
+        else:
+            out_p = args.out if args.out != "packed/vae_audio_dec.bin" else "packed/vae_video_dec.bin"
+            pack_video_vae.pack_remote_or_local_safetensors(args.src, out_p, config_url=args.config)
+        return
+
+    tiny_dir = args.tiny_dir or "tests/fixtures/tiny_vae_audio"
     if args.tiny:
-        print(f"Generating tiny diffusers audio VAE fixture in {args.tiny_dir}...")
-        meta = make_tiny_vae_audio(args.tiny_dir)
+        print(f"Generating tiny diffusers audio VAE fixture in {tiny_dir}...")
+        meta = make_tiny_vae_audio(tiny_dir)
         print(f"Tiny fixture generated successfully: {meta}")
     else:
         pack_remote_or_local_safetensors(args.src, args.out, config_url=args.config)
