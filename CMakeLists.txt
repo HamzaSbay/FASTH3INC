@@ -41,6 +41,15 @@ endif()
 add_executable(fh3 src/cli/fh3_run.c)
 target_link_libraries(fh3 PRIVATE fh3_core OpenMP::OpenMP_C)
 
+# Benchmarks
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/bench_matmul.c")
+    add_executable(bench_matmul benchmarks/bench_matmul.c)
+    target_link_libraries(bench_matmul PRIVATE fh3_core OpenMP::OpenMP_C)
+    if(UNIX OR MINGW)
+        target_link_libraries(bench_matmul PRIVATE m)
+    endif()
+endif()
+
 # CTest test suite
 enable_testing()
 
