@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+torch = pytest.importorskip("torch")
+gguf = pytest.importorskip("gguf")
+
 from tools import conform_all
 
 ROOT = Path(__file__).resolve().parent.parent.parent

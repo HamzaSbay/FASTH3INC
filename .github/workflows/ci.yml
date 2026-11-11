@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, feat/* ]
+    branches: [ main, master, "feat/*" ]
   pull_request:
     branches: [ main, master ]
 
@@ -11,24 +11,37 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Setup MinGW
-        uses: egor-tensin/setup-mingw@v2
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
         with:
-          platform: x64
+          msystem: MINGW64
+          update: false
+          install: mingw-w64-x86_64-gcc mingw-w64-x86_64-ninja mingw-w64-x86_64-cmake
+          path-type: inherit
+
+      - name: Add MinGW bin to PATH
+        run: echo "C:\msys64\mingw64\bin" >> $env:GITHUB_PATH
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy pytest
+          pip install numpy pytest requests gguf
+
       - name: Configure CMake
-        run: cmake -B build -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc
+
       - name: Build C Engine
         run: cmake --build build --config Release
+
       - name: Run CTest Unit Tests
         run: ctest --test-dir build --output-on-failure
+
       - name: Run Pytest
         env:
           FASTH3_SKIP_REMOTE_TESTS: "1"
@@ -38,24 +51,31 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc g++ cmake libomp-dev
+          sudo apt-get install -y gcc g++ cmake ninja-build
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+
       - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy pytest
+          pip install numpy pytest requests gguf
+
       - name: Configure CMake
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+        run: cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
+
       - name: Build C Engine
         run: cmake --build build --config Release
+
       - name: Run CTest Unit Tests
         run: ctest --test-dir build --output-on-failure
+
       - name: Run Pytest
         env:
           FASTH3_SKIP_REMOTE_TESTS: "1"

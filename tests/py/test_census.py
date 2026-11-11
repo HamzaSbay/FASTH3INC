@@ -10,6 +10,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+requests = pytest.importorskip("requests")
+gguf = pytest.importorskip("gguf")
+
 import tools.census as census
 import tools.gguf_remote as gguf_remote
 import tools.hf_range as hf_range

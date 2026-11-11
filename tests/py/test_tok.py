@@ -59,13 +59,18 @@ def test_fixtures_presence_and_structure(tok_fixtures):
 
 def test_hf_tokenizer_parity_with_corpus_ids(tok_fixtures):
     """Verify that HuggingFace AutoTokenizer matches golden corpus_ids bit-identically."""
-    from transformers import AutoTokenizer
+    try:
+        from transformers import AutoTokenizer
+    except ImportError:
+        pytest.skip("transformers not installed")
+
+    cache_dir = Path(r"C:\Users\sbaih\.cache\huggingface\hub\models--Qwen--Qwen2.5-0.5B\snapshots\060db6499f32faf8b98477b0a26969ef7d8b9987")
+    if not cache_dir.exists():
+        pytest.skip("Local HuggingFace model cache not present")
 
     with open(tok_fixtures["ids_json"], "r", encoding="utf-8") as f:
         golden_data = json.load(f)
 
-    # Load from local cache or fixtures dir
-    cache_dir = Path(r"C:\Users\sbaih\.cache\huggingface\hub\models--Qwen--Qwen2.5-0.5B\snapshots\060db6499f32faf8b98477b0a26969ef7d8b9987")
     tok = AutoTokenizer.from_pretrained(str(cache_dir))
 
     for item in golden_data:
@@ -96,8 +101,15 @@ def test_corpus_ids_bin_format(tok_fixtures):
 
 def test_windows_crlf_semantics(tok_fixtures):
     """Verify CRLF behavior matches specification: CRLF token differs from LF unless normalized."""
-    from transformers import AutoTokenizer
+    try:
+        from transformers import AutoTokenizer
+    except ImportError:
+        pytest.skip("transformers not installed")
+
     cache_dir = Path(r"C:\Users\sbaih\.cache\huggingface\hub\models--Qwen--Qwen2.5-0.5B\snapshots\060db6499f32faf8b98477b0a26969ef7d8b9987")
+    if not cache_dir.exists():
+        pytest.skip("Local HuggingFace model cache not present")
+
     tok = AutoTokenizer.from_pretrained(str(cache_dir))
 
     text_crlf = "Hello\r\nWorld"
@@ -118,10 +130,11 @@ def test_windows_crlf_semantics(tok_fixtures):
 
 def test_c_tokenizer_binary():
     """Verify that the C test binary executes and passes all test assertions."""
-    exe_path = BUILD_DIR / "test_tok.exe"
+    exe_name = "test_tok.exe" if sys.platform == "win32" else "test_tok"
+    exe_path = BUILD_DIR / exe_name
     if not exe_path.exists():
         pytest.skip(f"Binary {exe_path} not built yet")
 
     result = subprocess.run([str(exe_path)], capture_output=True, text=True, cwd=str(ROOT_DIR))
-    assert result.returncode == 0, f"test_tok.exe failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+    assert result.returncode == 0, f"{exe_name} failed:\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     assert "ALL TOKENIZER UNIT TESTS PASSED!" in result.stdout

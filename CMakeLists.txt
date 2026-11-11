@@ -6,6 +6,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
 find_package(OpenMP REQUIRED)
+find_package(Threads REQUIRED)
 
 # Common compiler flags for GCC / Clang
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -17,7 +18,6 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         -Wshadow
         -Wvla
         -march=native
-        -fopenmp
         -ffp-contract=off
     )
 endif()
@@ -31,7 +31,7 @@ target_include_directories(fh3_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-target_link_libraries(fh3_core PUBLIC OpenMP::OpenMP_C)
+target_link_libraries(fh3_core PUBLIC OpenMP::OpenMP_C Threads::Threads)
 
 if(UNIX OR MINGW)
     target_link_libraries(fh3_core PUBLIC m)
@@ -43,24 +43,12 @@ endif()
 
 # CLI binary target
 add_executable(fh3 src/cli/fh3_run.c)
-target_link_libraries(fh3 PRIVATE fh3_core OpenMP::OpenMP_C)
-if(UNIX OR MINGW)
-    target_link_libraries(fh3 PRIVATE m)
-endif()
-if(WIN32)
-    target_link_libraries(fh3 PRIVATE psapi)
-endif()
+target_link_libraries(fh3 PRIVATE fh3_core)
 
 # Benchmarks
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/benchmarks/bench_matmul.c")
     add_executable(bench_matmul benchmarks/bench_matmul.c)
-    target_link_libraries(bench_matmul PRIVATE fh3_core OpenMP::OpenMP_C)
-    if(UNIX OR MINGW)
-        target_link_libraries(bench_matmul PRIVATE m)
-    endif()
-    if(WIN32)
-        target_link_libraries(bench_matmul PRIVATE psapi)
-    endif()
+    target_link_libraries(bench_matmul PRIVATE fh3_core)
 endif()
 
 # CTest test suite
@@ -70,12 +58,6 @@ file(GLOB_RECURSE TEST_SRCS CONFIGURE_DEPENDS "tests/unit/*.c")
 foreach(test_file ${TEST_SRCS})
     get_filename_component(test_name_we ${test_file} NAME_WE)
     add_executable(${test_name_we} ${test_file})
-    target_link_libraries(${test_name_we} PRIVATE fh3_core OpenMP::OpenMP_C)
-    if(UNIX OR MINGW)
-        target_link_libraries(${test_name_we} PRIVATE m)
-    endif()
-    if(WIN32)
-        target_link_libraries(${test_name_we} PRIVATE psapi)
-    endif()
+    target_link_libraries(${test_name_we} PRIVATE fh3_core)
     add_test(NAME ${test_name_we} COMMAND ${test_name_we} WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 endforeach()

@@ -8,6 +8,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+requests = pytest.importorskip("requests")
+gguf = pytest.importorskip("gguf")
+
 from tools import census, fold_adaln, gguf_remote, hf_range, pack_dit
 from tools.ref import h3_ref
 

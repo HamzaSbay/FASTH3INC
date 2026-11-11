@@ -15,7 +15,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
+diffusers = pytest.importorskip("diffusers")
 
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT_DIR))

@@ -3,7 +3,9 @@
 import math
 import numpy as np
 import pytest
-import torch
+
+torch = pytest.importorskip("torch")
+diffusers = pytest.importorskip("diffusers")
 from diffusers import MiniMaxH3Transformer3DModel
 
 from tools.ref.h3_ref import (
