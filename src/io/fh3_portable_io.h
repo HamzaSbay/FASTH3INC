@@ -205,7 +205,9 @@ static inline int64_t fh3_pread(Fh3File *f, void *buf, size_t n, uint64_t off) {
 
 #else /* POSIX */
 
+#ifndef _GNU_SOURCE
 #define _GNU_SOURCE
+#endif
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>

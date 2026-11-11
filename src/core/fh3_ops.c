@@ -46,7 +46,7 @@ static inline float dot_product_scalar(const float *x, const float *w, int64_t n
     return dot;
 }
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
 static inline float dot_product_avx2(const float *x, const float *w, int64_t n) {
     __m256 vacc = _mm256_setzero_ps();
     int64_t n8 = n - (n % 8);
@@ -241,7 +241,7 @@ void fh3_matmul_scalar(const Fh3W *w, const float *x, float *y, int n_tok, const
 }
 
 void fh3_matmul_avx2(const Fh3W *w, const float *x, float *y, int n_tok, const float *bias_or_null) {
-#if !defined(__AVX2__)
+#if !defined(__AVX2__) || !defined(__FMA__)
     fh3_matmul_scalar(w, x, y, n_tok, bias_or_null);
 #else
     if (!w || !x || !y || n_tok <= 0 || w->in <= 0 || w->out <= 0) return;
@@ -336,7 +336,7 @@ void fh3_matmul(const Fh3W *w, const float *x, float *y, int n_tok, const float 
                     fh3_dequant(w->type, src_row, dst_row, w->in);
                 }
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
                 int t = 0;
                 for (; t + 2 <= n_tok; t += 2) {
                     const float *xt0 = x + (size_t)t * (size_t)w->in;
@@ -415,7 +415,7 @@ void fh3_rmsnorm(float *x, const float *w, int n, int dim, float eps) {
         float *row = x + (size_t)i * (size_t)dim;
 
         float sum = 0.0f;
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
         int64_t d8 = dim - (dim % 8);
         __m256 vsum = _mm256_setzero_ps();
         for (int64_t d = 0; d < d8; d += 8) {
@@ -436,7 +436,7 @@ void fh3_rmsnorm(float *x, const float *w, int n, int dim, float eps) {
         float variance = sum / (float)dim;
         float inv_rms = 1.0f / sqrtf(variance + eps);
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
         __m256 vinv = _mm256_set1_ps(inv_rms);
         for (int64_t d = 0; d < d8; d += 8) {
             __m256 vx = _mm256_loadu_ps(row + d);
@@ -469,7 +469,7 @@ void fh3_rope3(float *x, const float *cos, const float *sin, int n, int heads, i
             const float *sin_i = sin + (size_t)i * (size_t)rot_dim;
             float *vec = x + ((size_t)i * (size_t)heads + (size_t)h) * (size_t)head_dim;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
             int j8 = half_rot - (half_rot % 8);
             for (int j = 0; j < j8; j += 8) {
                 __m256 vv0 = _mm256_loadu_ps(vec + j);
@@ -534,7 +534,7 @@ void fh3_modulate(float *x, const float *shift, const float *scale, int n, int d
     #pragma omp parallel for schedule(static) if (total > 4096)
     for (int64_t k0 = 0; k0 < total; k0 += 1024) {
         int64_t k1 = (k0 + 1024 <= total) ? (k0 + 1024) : total;
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
         int64_t k = k0;
         __m256 vone = _mm256_set1_ps(1.0f);
         for (; k + 8 <= k1; k += 8) {
@@ -564,7 +564,7 @@ void fh3_gate_residual(float *h, const float *gate, const float *y, int n, int d
     #pragma omp parallel for schedule(static) if (total > 4096)
     for (int64_t k0 = 0; k0 < total; k0 += 1024) {
         int64_t k1 = (k0 + 1024 <= total) ? (k0 + 1024) : total;
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
         int64_t k = k0;
         for (; k + 8 <= k1; k += 8) {
             __m256 vh = _mm256_loadu_ps(h + k);
@@ -615,7 +615,7 @@ void fh3_attention(const float *q, const float *k, const float *v, float *o, int
                     for (int t = 0; t < B; t++) {
                         int j = j0 + t;
                         const float *kj = k + ((size_t)j * (size_t)heads + (size_t)h) * (size_t)hd;
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
                         scores[t] = dot_product_avx2(qi, kj, hd) * scale;
 #else
                         scores[t] = dot_product_scalar(qi, kj, hd) * scale;
@@ -632,7 +632,7 @@ void fh3_attention(const float *q, const float *k, const float *v, float *o, int
                     float alpha = expf(m - m_new);
                     l *= alpha;
 
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
                     __m256 valpha = _mm256_set1_ps(alpha);
                     for (int d = 0; d < hd8; d += 8) {
                         __m256 vacc = _mm256_loadu_ps(acc + d);
@@ -653,7 +653,7 @@ void fh3_attention(const float *q, const float *k, const float *v, float *o, int
                         const float *vj = v + ((size_t)j * (size_t)heads + (size_t)h) * (size_t)hd;
                         float p = expf(scores[t] - m_new);
                         l += p;
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
                         __m256 vp = _mm256_set1_ps(p);
                         for (int d = 0; d < hd8; d += 8) {
                             __m256 vacc = _mm256_loadu_ps(acc + d);
@@ -674,7 +674,7 @@ void fh3_attention(const float *q, const float *k, const float *v, float *o, int
                 }
 
                 float inv_l = (l > 0.0f) ? (1.0f / l) : 0.0f;
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
                 __m256 vinv = _mm256_set1_ps(inv_l);
                 for (int d = 0; d < hd8; d += 8) {
                     __m256 vacc = _mm256_loadu_ps(acc + d);

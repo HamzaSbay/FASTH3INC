@@ -19,7 +19,9 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         -Wextra
         -Wshadow
         -Wvla
-        -march=native
+        -mavx2
+        -mfma
+        -mf16c
         -ffp-contract=off
     )
 endif()

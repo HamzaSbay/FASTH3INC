@@ -320,7 +320,7 @@ static inline float reduce_tree_8(const float acc[8]) {
 }
 
 static inline float dot_f32(const float *a, const float *b, int n) {
-#if defined(__AVX2__)
+#if defined(__AVX2__) && defined(__FMA__)
     __m256 vacc = _mm256_setzero_ps();
     int n8 = n - (n % 8);
     for (int k = 0; k < n8; k += 8) {

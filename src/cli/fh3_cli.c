@@ -872,7 +872,10 @@ int fh3_cli_run_phase2(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
         num_text = (int)emb_hdr[2];
         text_dim = (int)emb_hdr[3];
         prompt_emb = (float *)malloc((size_t)num_text * (size_t)text_dim * sizeof(float));
-        fread(prompt_emb, sizeof(float), (size_t)num_text * (size_t)text_dim, fp_emb);
+        if (prompt_emb) {
+            size_t r = fread(prompt_emb, sizeof(float), (size_t)num_text * (size_t)text_dim, fp_emb);
+            (void)r;
+        }
     } else {
         /* Fallback raw floats */
         fseek(fp_emb, 0, SEEK_END);
@@ -881,7 +884,10 @@ int fh3_cli_run_phase2(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
         num_text = 6;
         text_dim = (int)(fsz / (num_text * sizeof(float)));
         prompt_emb = (float *)malloc((size_t)fsz);
-        fread(prompt_emb, 1, (size_t)fsz, fp_emb);
+        if (prompt_emb) {
+            size_t r = fread(prompt_emb, 1, (size_t)fsz, fp_emb);
+            (void)r;
+        }
     }
     fclose(fp_emb);
 
@@ -1331,7 +1337,8 @@ int fh3_cli_run_phase3(const Fh3CliArgs *args, const Fh3ResolvedDims *dims, Fh3T
         size_t num_v_tokens = (size_t)F_lat * (size_t)(h_lat / 2) * (size_t)(w_lat / 2);
         float *tokens = (float *)malloc(num_v_tokens * 96 * sizeof(float));
         if (tokens) {
-            fread(tokens, sizeof(float), num_v_tokens * 96, fp_vl);
+            size_t r = fread(tokens, sizeof(float), num_v_tokens * 96, fp_vl);
+            (void)r;
 
             int pt = 1, ph = 2, pw = 2;
             int grid_t = F_lat / pt;
