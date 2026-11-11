@@ -71,13 +71,7 @@ jobs:
         run: cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
 
       - name: Build C Engine
-        run: |
-          if ! cmake --build build --config Release -- -v > build_linux.log 2>&1; then
-            cat build_linux.log
-            ERR=$(tail -n 25 build_linux.log | tr '\n' ' | ' | tr '\r' ' ')
-            echo "::error title=CompilerOutput::$ERR"
-            exit 1
-          fi
+        run: cmake --build build --config Release
 
       - name: Run CTest Unit Tests
         run: ctest --test-dir build --output-on-failure
