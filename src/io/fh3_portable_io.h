@@ -318,12 +318,78 @@ static inline uint64_t fh3_mem_total(void) {
 
 static inline int64_t fh3_pread(Fh3File *f, void *buf, size_t n, uint64_t off) {
     if (!f || f->fd < 0 || !buf) return FH3_ERR;
+    if (n == 0) return 0;
+    if (off >= f->size) return 0;
+
+    /* If request exceeds remaining file, clamp to remaining bytes */
+    if (off + (uint64_t)n > f->size) {
+        n = (size_t)(f->size - off);
+    }
+
+    if (f->is_direct) {
+        /* Direct I/O requires 4096 sector alignment for off, n, and buffer address */
+        if (((uintptr_t)buf % 4096 != 0) || (off % 4096 != 0) || (n % 4096 != 0)) {
+            uint64_t aligned_off = off & ~4095ULL;
+            uint64_t end_off = off + n;
+            uint64_t aligned_end = (end_off + 4095ULL) & ~4095ULL;
+            size_t aligned_n = (size_t)(aligned_end - aligned_off);
+
+            void *bounce = fh3_alloc_aligned(aligned_n);
+            if (!bounce) return FH3_E_NOMEM;
+
+            size_t b_read = 0;
+            bool direct_fail = false;
+            while (b_read < aligned_n) {
+                ssize_t ret = pread(f->fd, (uint8_t *)bounce + b_read, aligned_n - b_read, (off_t)(aligned_off + b_read));
+                if (ret < 0) {
+                    if (errno == EINTR) continue;
+                    direct_fail = true;
+                    break;
+                }
+                if (ret == 0) break;
+                b_read += (size_t)ret;
+            }
+
+            if (direct_fail) {
+                fh3_free_aligned(bounce);
+                /* Fall back from direct to buffered if direct I/O is rejected by filesystem/kernel */
+#ifdef O_DIRECT
+                int fl = fcntl(f->fd, F_GETFL);
+                if (fl >= 0) {
+                    fcntl(f->fd, F_SETFL, fl & ~O_DIRECT);
+                }
+#endif
+                f->is_direct = false;
+                /* Retry using regular buffered path below */
+            } else {
+                size_t off_in_bounce = (size_t)(off - aligned_off);
+                size_t available = (b_read > off_in_bounce) ? (b_read - off_in_bounce) : 0;
+                size_t copy_n = (n < available) ? n : available;
+                if (copy_n > 0) {
+                    memcpy(buf, (const uint8_t *)bounce + off_in_bounce, copy_n);
+                }
+                fh3_free_aligned(bounce);
+                return (int64_t)copy_n;
+            }
+        }
+    }
+
     size_t total = 0;
     uint8_t *p = (uint8_t *)buf;
     while (total < n) {
         ssize_t ret = pread(f->fd, p + total, n - total, (off_t)(off + total));
         if (ret < 0) {
             if (errno == EINTR) continue;
+            if (f->is_direct && (errno == EINVAL || errno == EOPNOTSUPP)) {
+#ifdef O_DIRECT
+                int fl = fcntl(f->fd, F_GETFL);
+                if (fl >= 0) {
+                    fcntl(f->fd, F_SETFL, fl & ~O_DIRECT);
+                }
+#endif
+                f->is_direct = false;
+                continue;
+            }
             return FH3_E_IO;
         }
         if (ret == 0) break;
