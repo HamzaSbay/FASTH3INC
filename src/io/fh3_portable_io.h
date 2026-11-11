@@ -1,3 +1,7 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #ifndef FH3_PORTABLE_IO_H
 #define FH3_PORTABLE_IO_H
 

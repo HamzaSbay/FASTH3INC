@@ -5,6 +5,8 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
+add_compile_definitions(_GNU_SOURCE)
+
 find_package(OpenMP REQUIRED)
 find_package(Threads REQUIRED)
 

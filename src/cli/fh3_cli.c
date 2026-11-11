@@ -86,13 +86,18 @@ void fh3_cli_detect_cpu(bool *has_avx2, bool *has_fma) {
     *has_avx2 = false;
     *has_fma = false;
 #if defined(__x86_64__) || defined(_M_X64) || defined(__i386__) || defined(_M_IX86)
-    unsigned int eax, ebx, ecx, edx;
+    unsigned int eax = 0, ebx = 0, ecx = 0, edx = 0;
     if (__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
         if (ecx & (1 << 12)) *has_fma = true;
     }
+#if defined(__cpuid_count)
+    __cpuid_count(7, 0, eax, ebx, ecx, edx);
+    if (ebx & (1 << 5)) *has_avx2 = true;
+#elif defined(__get_cpuid_count)
     if (__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) {
         if (ebx & (1 << 5)) *has_avx2 = true;
     }
+#endif
 #endif
 }
 

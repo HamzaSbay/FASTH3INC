@@ -17,9 +17,12 @@ static void test_sleep_ms(int ms) {
     Sleep((DWORD)ms);
 }
 #else
-#include <unistd.h>
+#include <time.h>
 static void test_sleep_ms(int ms) {
-    usleep((useconds_t)ms * 1000);
+    struct timespec req;
+    req.tv_sec = ms / 1000;
+    req.tv_nsec = (long)(ms % 1000) * 1000000L;
+    nanosleep(&req, NULL);
 }
 #endif
 
