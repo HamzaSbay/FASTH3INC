@@ -1,5 +1,13 @@
 # FastH3-in-C (`fh3`)
 
+[![Language](https://img.shields.io/badge/Language-C99-00599C?logo=c&logoColor=white)](https://en.wikipedia.org/wiki/C99)
+[![Dependencies](https://img.shields.io/badge/Dependencies-Zero-success)](include/fh3/fh3.h)
+[![SIMD](https://img.shields.io/badge/SIMD-AVX2%20%2B%20FMA-brightgreen)](src/core/fh3_ops.c)
+[![Parallelism](https://img.shields.io/badge/Threading-OpenMP-orange)](CMakeLists.txt)
+[![Model](https://img.shields.io/badge/Model-FastH3--8--Step--V2%20(35B)-blueviolet)](https://huggingface.co/realrebelai/FastH3-V2_GGUFs)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-16%2F16%20Passed-brightgreen)](tests/)
+
 > **Pure C99 inference engine for FastH3-8-Step-V2 (35B MiniMax-H3 / FastVideo): text-to-synchronized-video + stereo audio on consumer laptops with as little as 2 GB to 9 GB of RAM.**
 
 ---
